@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ω OPTIONS TERMINAL — NSE Black-Scholes Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <div class="brand">
+      <div class="brand-mark">Ω</div>
+      <div class="brand-text">
+        <div class="t1">OPTIONS TERMINAL<span class="cursor-blink"></span></div>
+        <div class="t2">NSE · LIVE OPTION CHAIN · BLACK-SCHOLES DESK</div>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search NSE symbol or company — e.g. RELIANCE, NIFTY..." autocomplete="off">
+      <div class="dropdown" id="dropdown"></div>
+    </div>
+
+    <select class="sel" id="expirySelect" disabled><option>Expiry —</option></select>
+    <select class="sel" id="strikeSelect" disabled><option>Strike —</option></select>
+
+    <div class="opt-toggle">
+      <button id="btnCall" class="active call">CALL</button>
+      <button id="btnPut" class="put">PUT</button>
+    </div>
+
+    <button class="run-btn" id="fetchBtn">FETCH LIVE ▸</button>
+    <button class="run-btn secondary" id="recalcBtn">RECALC LOCAL</button>
+
+    <div class="status-pill"><span class="status-dot" id="statusDot"></span> <span id="statusText">SELECT A SYMBOL TO BEGIN</span></div>
+  </div>
+</header>
+
+<div class="banner error" id="errorBanner"></div>
+<div class="banner info show" id="infoBanner">Live data comes from NSE's public option-chain API via the backend. Search a symbol, pick an expiry &amp; strike, then hit "Fetch Live" — no manual price entry needed. You can still edit any field below and hit "Recalc Local" for what-if scenarios.</div>
+
+<div class="params-strip">
+  <div class="param">
+    <label>Symbol</label>
+    <input type="text" id="pSymbol" value="" placeholder="—" style="text-transform:uppercase;" readonly>
+  </div>
+  <div class="param">
+    <label>Spot Price (S)<span class="unit">₹ — live from NSE</span></label>
+    <input type="number" id="pSpot" step="0.05" placeholder="—">
+  </div>
+  <div class="param">
+    <label>Strike (K)<span class="unit">₹</span></label>
+    <input type="number" id="pStrike" step="0.05" placeholder="—">
+  </div>
+  <div class="param">
+    <label>Days to Expiry<span class="unit">calendar</span></label>
+    <input type="number" id="pDays" step="1" min="1" placeholder="—">
+  </div>
+  <div class="param">
+    <label>Risk-Free Rate (r)<span class="unit">%</span></label>
+    <input type="number" id="pRate" value="6.5" step="0.05">
+  </div>
+  <div class="param">
+    <label>Volatility σ<span class="unit">% — NSE IV or override</span></label>
+    <input type="number" id="pVol" step="0.5" placeholder="—">
+  </div>
+  <div class="param">
+    <label>Dividend Yield (q)<span class="unit">%</span></label>
+    <input type="number" id="pDiv" value="0" step="0.05">
+  </div>
+  <div class="param market">
+    <label>Market Premium (LTP)<span class="unit">₹ — live from NSE</span></label>
+    <input type="number" id="pMarket" step="0.05" placeholder="—">
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ===================== SIDEBAR: SUGGESTION ===================== -->
+  <aside class="sidebar">
+    <div class="suggestion-card">
+      <div class="sug-head">
+        <div class="sug-eyebrow">Model Suggestion</div>
+        <div class="sug-verdict wait" id="sugVerdict">SELECT A CONTRACT</div>
+        <div class="sug-sub" id="sugSub">Fetch live data to get a fair-value read.</div>
+      </div>
+      <div class="sug-body">
+        <div class="sug-price-block">
+          <div class="lbl" id="sugPriceLabel">Suggested Entry Price</div>
+          <div class="val" id="sugPriceVal">₹ —</div>
+          <div class="range" id="sugPriceRange">Fair-value zone: — to —</div>
+        </div>
+        <div>
+          <div class="sug-row"><span class="k">Model Fair Value</span><span class="v" id="sugFair">—</span></div>
+          <div class="sug-row"><span class="k">Market Premium (LTP)</span><span class="v" id="sugMarket">—</span></div>
+          <div class="sug-row"><span class="k">Mispricing</span><span class="v" id="sugDiff">—</span></div>
+          <div class="sug-row"><span class="k">Implied Vol (solved)</span><span class="v" id="sugIV">—</span></div>
+          <div class="sug-row"><span class="k">Breakeven at Expiry</span><span class="v" id="sugBE">—</span></div>
+          <div class="sug-row"><span class="k">Theta Decay / Day</span><span class="v" id="sugTheta">—</span></div>
+          <div class="sug-row"><span class="k">5-Day Decay Cost</span><span class="v" id="sugTheta5">—</span></div>
+        </div>
+        <div class="sug-note" id="sugReasoning">Search a symbol above, pick an expiry and strike, then hit "Fetch Live" to pull the real NSE premium and get a suggestion.</div>
+        <div class="sug-disclaimer">Educational model output derived from Black-Scholes fair value — not investment advice. Confirm live premiums, lot size and liquidity on NSE before trading.</div>
+      </div>
+    </div>
+
+    <div class="mini-card">
+      <h4>Live Market Data (NSE)</h4>
+      <div class="mini-row"><span class="k">Last Traded Price</span><span class="v live" id="liveLTP">—</span></div>
+      <div class="mini-row"><span class="k">NSE Implied Vol</span><span class="v live" id="liveIV">—</span></div>
+      <div class="mini-row"><span class="k">Open Interest</span><span class="v" id="liveOI">—</span></div>
+      <div class="mini-row"><span class="k">Volume</span><span class="v" id="liveVol">—</span></div>
+      <div class="mini-row"><span class="k">Bid / Ask</span><span class="v" id="liveBidAsk">—</span></div>
+      <div class="mini-row"><span class="k">Fetched At</span><span class="v" id="liveFetchedAt">—</span></div>
+    </div>
+
+    <div class="mini-card">
+      <h4>Instrument Snapshot</h4>
+      <div class="mini-row"><span class="k">Symbol</span><span class="v" id="snapSymbol">—</span></div>
+      <div class="mini-row"><span class="k">Sector</span><span class="v" id="snapSector">—</span></div>
+      <div class="mini-row"><span class="k">Lot Size</span><span class="v" id="snapLot">—</span></div>
+      <div class="mini-row"><span class="k">Contract Type</span><span class="v">European (BS) · American (CRR)</span></div>
+    </div>
+
+    <div class="mini-card">
+      <h4>Put-Call Parity Check</h4>
+      <div class="mini-row"><span class="k">C − P</span><span class="v" id="parityLHS">—</span></div>
+      <div class="mini-row"><span class="k">Se⁻ᵠᵀ − Ke⁻ʳᵀ</span><span class="v" id="parityRHS">—</span></div>
+      <div class="mini-row"><span class="k">Deviation</span><span class="v check-pass" id="parityDiff">—</span></div>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN CONTENT ===================== -->
+  <main class="main">
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-head"><h3>Black-Scholes Price</h3><span class="tag">closed-form</span></div>
+        <div class="card-body">
+          <div class="big-two">
+            <div class="price-box call"><div class="pl">Call</div><div class="pv" id="bsCall">—</div></div>
+            <div class="price-box put"><div class="pl">Put</div><div class="pv" id="bsPut">—</div></div>
+          </div>
+          <div style="margin-top:10px;">
+            <div class="data-row"><span class="k">d1</span><span class="v" id="bsD1">—</span></div>
+            <div class="data-row"><span class="k">d2</span><span class="v" id="bsD2">—</span></div>
+            <div class="data-row"><span class="k">N(d1) / N(d2)</span><span class="v" id="bsNd">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Greeks</h3><span class="tag" id="greeksTag">CALL side</span></div>
+        <div class="card-body"><table class="greeks" id="greeksTable"><tbody></tbody></table></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>CRR Binomial (150 steps)</h3><span class="tag" id="crrTag">CALL</span></div>
+        <div class="card-body">
+          <div class="data-row"><span class="k">European (matches BS)</span><span class="v" id="crrEuro">—</span></div>
+          <div class="data-row"><span class="k">American (early exercise)</span><span class="v" id="crrAmerican">—</span></div>
+          <div class="data-row"><span class="k">Early-Exercise Premium</span><span class="v" id="crrPremium">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Monte Carlo</h3><span class="tag" id="mcTag">CALL</span></div>
+        <div class="card-body">
+          <div class="data-row"><span class="k">Simulated Price</span><span class="v" id="mcPrice">—</span></div>
+          <div class="data-row"><span class="k">Std. Error</span><span class="v" id="mcErr">—</span></div>
+          <div class="data-row"><span class="k">95% CI</span><span class="v" id="mcCI">—</span></div>
+          <div class="data-row"><span class="k">vs. Black-Scholes</span><span class="v" id="mcVsBS">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Implied Volatility</h3><span class="tag">from live LTP</span></div>
+        <div class="card-body">
+          <div class="data-row"><span class="k">Model σ (used)</span><span class="v" id="ivModel">—</span></div>
+          <div class="data-row"><span class="k">Solved from LTP</span><span class="v" id="ivImplied">—</span></div>
+          <div class="data-row"><span class="k">NSE-reported IV</span><span class="v" id="ivNse">—</span></div>
+          <div class="data-row"><span class="k">Solved − Model</span><span class="v" id="ivDelta">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Contract</h3><span class="tag">live selection</span></div>
+        <div class="card-body">
+          <div class="data-row"><span class="k">Expiry</span><span class="v" id="ctExpiry">—</span></div>
+          <div class="data-row"><span class="k">Days to Expiry</span><span class="v" id="ctDays">—</span></div>
+          <div class="data-row"><span class="k">Strike</span><span class="v" id="ctStrike">—</span></div>
+          <div class="data-row"><span class="k">Type</span><span class="v" id="ctType">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card"><div class="card-head"><h3>Payoff Diagram at Expiry</h3></div><div class="chart-body"><canvas id="chartPayoff"></canvas></div></div>
+      <div class="chart-card"><div class="card-head"><h3>Option Price vs. Spot Price</h3></div><div class="chart-body"><canvas id="chartVsSpot"></canvas></div></div>
+      <div class="chart-card"><div class="card-head"><h3>Option Price vs. Volatility</h3></div><div class="chart-body"><canvas id="chartVsVol"></canvas></div></div>
+      <div class="chart-card"><div class="card-head"><h3>Option Price vs. Time to Expiry</h3></div><div class="chart-body"><canvas id="chartVsTime"></canvas></div></div>
+      <div class="chart-card"><div class="card-head"><h3>Delta &amp; Gamma vs. Spot</h3></div><div class="chart-body"><canvas id="chartGreeksSpot"></canvas></div></div>
+      <div class="chart-card"><div class="card-head"><h3>Monte Carlo Terminal Price Distribution</h3></div><div class="chart-body"><canvas id="chartMC"></canvas></div></div>
+    </div>
+
+    <div class="footer-note">BLACK-SCHOLES · CRR BINOMIAL · MONTE CARLO — CHARTS COMPUTED CLIENT-SIDE · CONTRACT DATA FETCHED LIVE FROM NSE VIA BACKEND</div>
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/pricing.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

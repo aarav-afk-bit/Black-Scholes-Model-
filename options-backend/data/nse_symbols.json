@@ -1,0 +1,558 @@
+{
+  "meta": {
+    "note": "Reference symbol master for the search box only (sector, lot size, an illustrative reference vol). Live spot price, strikes, expiries, LTP and IV all come from the backend's live NSE fetch \u2014 this file never supplies pricing inputs.",
+    "indexLotSizesVerify": "Index lot sizes change periodically (NSE circulars) \u2014 verify before use."
+  },
+  "symbols": [
+    {
+      "symbol": "NIFTY",
+      "name": "Nifty 50 Index",
+      "sector": "Index",
+      "spot": 24500,
+      "vol": 0.13,
+      "divYield": 0.0,
+      "lotSize": 25,
+      "isIndex": true
+    },
+    {
+      "symbol": "BANKNIFTY",
+      "name": "Nifty Bank Index",
+      "sector": "Index",
+      "spot": 51500,
+      "vol": 0.16,
+      "divYield": 0.0,
+      "lotSize": 15,
+      "isIndex": true
+    },
+    {
+      "symbol": "FINNIFTY",
+      "name": "Nifty Financial Services Index",
+      "sector": "Index",
+      "spot": 23500,
+      "vol": 0.15,
+      "divYield": 0.0,
+      "lotSize": 25,
+      "isIndex": true
+    },
+    {
+      "symbol": "MIDCPNIFTY",
+      "name": "Nifty Midcap Select Index",
+      "sector": "Index",
+      "spot": 12500,
+      "vol": 0.18,
+      "divYield": 0.0,
+      "lotSize": 50,
+      "isIndex": true
+    },
+    {
+      "symbol": "RELIANCE",
+      "name": "Reliance Industries",
+      "sector": "Energy",
+      "spot": 1310,
+      "vol": 0.24,
+      "divYield": 0.004,
+      "lotSize": 500,
+      "isIndex": false
+    },
+    {
+      "symbol": "TCS",
+      "name": "Tata Consultancy Services",
+      "sector": "IT",
+      "spot": 4150,
+      "vol": 0.22,
+      "divYield": 0.014,
+      "lotSize": 175,
+      "isIndex": false
+    },
+    {
+      "symbol": "INFY",
+      "name": "Infosys",
+      "sector": "IT",
+      "spot": 1850,
+      "vol": 0.26,
+      "divYield": 0.021,
+      "lotSize": 400,
+      "isIndex": false
+    },
+    {
+      "symbol": "HDFCBANK",
+      "name": "HDFC Bank",
+      "sector": "Banking",
+      "spot": 1750,
+      "vol": 0.21,
+      "divYield": 0.011,
+      "lotSize": 550,
+      "isIndex": false
+    },
+    {
+      "symbol": "ICICIBANK",
+      "name": "ICICI Bank",
+      "sector": "Banking",
+      "spot": 1280,
+      "vol": 0.23,
+      "divYield": 0.008,
+      "lotSize": 700,
+      "isIndex": false
+    },
+    {
+      "symbol": "SBIN",
+      "name": "State Bank of India",
+      "sector": "Banking",
+      "spot": 830,
+      "vol": 0.29,
+      "divYield": 0.01,
+      "lotSize": 1500,
+      "isIndex": false
+    },
+    {
+      "symbol": "KOTAKBANK",
+      "name": "Kotak Mahindra Bank",
+      "sector": "Banking",
+      "spot": 1920,
+      "vol": 0.24,
+      "divYield": 0.001,
+      "lotSize": 400,
+      "isIndex": false
+    },
+    {
+      "symbol": "AXISBANK",
+      "name": "Axis Bank",
+      "sector": "Banking",
+      "spot": 1160,
+      "vol": 0.27,
+      "divYield": 0.001,
+      "lotSize": 625,
+      "isIndex": false
+    },
+    {
+      "symbol": "BAJFINANCE",
+      "name": "Bajaj Finance",
+      "sector": "NBFC",
+      "spot": 7200,
+      "vol": 0.32,
+      "divYield": 0.004,
+      "lotSize": 125,
+      "isIndex": false
+    },
+    {
+      "symbol": "BAJAJFINSV",
+      "name": "Bajaj Finserv",
+      "sector": "NBFC",
+      "spot": 1780,
+      "vol": 0.3,
+      "divYield": 0.001,
+      "lotSize": 500,
+      "isIndex": false
+    },
+    {
+      "symbol": "BHARTIARTL",
+      "name": "Bharti Airtel",
+      "sector": "Telecom",
+      "spot": 1720,
+      "vol": 0.26,
+      "divYield": 0.005,
+      "lotSize": 475,
+      "isIndex": false
+    },
+    {
+      "symbol": "HINDUNILVR",
+      "name": "Hindustan Unilever",
+      "sector": "FMCG",
+      "spot": 2380,
+      "vol": 0.18,
+      "divYield": 0.019,
+      "lotSize": 300,
+      "isIndex": false
+    },
+    {
+      "symbol": "ITC",
+      "name": "ITC Limited",
+      "sector": "FMCG",
+      "spot": 465,
+      "vol": 0.2,
+      "divYield": 0.03,
+      "lotSize": 1600,
+      "isIndex": false
+    },
+    {
+      "symbol": "LT",
+      "name": "Larsen & Toubro",
+      "sector": "Infrastructure",
+      "spot": 3620,
+      "vol": 0.27,
+      "divYield": 0.008,
+      "lotSize": 150,
+      "isIndex": false
+    },
+    {
+      "symbol": "MARUTI",
+      "name": "Maruti Suzuki",
+      "sector": "Auto",
+      "spot": 12800,
+      "vol": 0.25,
+      "divYield": 0.009,
+      "lotSize": 50,
+      "isIndex": false
+    },
+    {
+      "symbol": "M&M",
+      "name": "Mahindra & Mahindra",
+      "sector": "Auto",
+      "spot": 3050,
+      "vol": 0.29,
+      "divYield": 0.006,
+      "lotSize": 200,
+      "isIndex": false
+    },
+    {
+      "symbol": "TATAMOTORS",
+      "name": "Tata Motors",
+      "sector": "Auto",
+      "spot": 780,
+      "vol": 0.36,
+      "divYield": 0.005,
+      "lotSize": 1425,
+      "isIndex": false
+    },
+    {
+      "symbol": "TATASTEEL",
+      "name": "Tata Steel",
+      "sector": "Metals",
+      "spot": 165,
+      "vol": 0.34,
+      "divYield": 0.021,
+      "lotSize": 5500,
+      "isIndex": false
+    },
+    {
+      "symbol": "JSWSTEEL",
+      "name": "JSW Steel",
+      "sector": "Metals",
+      "spot": 1030,
+      "vol": 0.31,
+      "divYield": 0.007,
+      "lotSize": 675,
+      "isIndex": false
+    },
+    {
+      "symbol": "HINDALCO",
+      "name": "Hindalco Industries",
+      "sector": "Metals",
+      "spot": 690,
+      "vol": 0.33,
+      "divYield": 0.01,
+      "lotSize": 1400,
+      "isIndex": false
+    },
+    {
+      "symbol": "ADANIENT",
+      "name": "Adani Enterprises",
+      "sector": "Conglomerate",
+      "spot": 2550,
+      "vol": 0.42,
+      "divYield": 0.001,
+      "lotSize": 250,
+      "isIndex": false
+    },
+    {
+      "symbol": "ADANIPORTS",
+      "name": "Adani Ports & SEZ",
+      "sector": "Infrastructure",
+      "spot": 1420,
+      "vol": 0.35,
+      "divYield": 0.004,
+      "lotSize": 400,
+      "isIndex": false
+    },
+    {
+      "symbol": "ONGC",
+      "name": "Oil & Natural Gas Corp",
+      "sector": "Energy",
+      "spot": 255,
+      "vol": 0.28,
+      "divYield": 0.045,
+      "lotSize": 3850,
+      "isIndex": false
+    },
+    {
+      "symbol": "NTPC",
+      "name": "NTPC Limited",
+      "sector": "Power",
+      "spot": 370,
+      "vol": 0.24,
+      "divYield": 0.023,
+      "lotSize": 3000,
+      "isIndex": false
+    },
+    {
+      "symbol": "POWERGRID",
+      "name": "Power Grid Corp",
+      "sector": "Power",
+      "spot": 320,
+      "vol": 0.22,
+      "divYield": 0.038,
+      "lotSize": 2700,
+      "isIndex": false
+    },
+    {
+      "symbol": "SUNPHARMA",
+      "name": "Sun Pharmaceutical",
+      "sector": "Pharma",
+      "spot": 1780,
+      "vol": 0.24,
+      "divYield": 0.008,
+      "lotSize": 350,
+      "isIndex": false
+    },
+    {
+      "symbol": "DRREDDY",
+      "name": "Dr. Reddy's Laboratories",
+      "sector": "Pharma",
+      "spot": 1290,
+      "vol": 0.26,
+      "divYield": 0.007,
+      "lotSize": 625,
+      "isIndex": false
+    },
+    {
+      "symbol": "CIPLA",
+      "name": "Cipla",
+      "sector": "Pharma",
+      "spot": 1560,
+      "vol": 0.23,
+      "divYield": 0.008,
+      "lotSize": 500,
+      "isIndex": false
+    },
+    {
+      "symbol": "DIVISLAB",
+      "name": "Divi's Laboratories",
+      "sector": "Pharma",
+      "spot": 5900,
+      "vol": 0.27,
+      "divYield": 0.006,
+      "lotSize": 100,
+      "isIndex": false
+    },
+    {
+      "symbol": "ASIANPAINT",
+      "name": "Asian Paints",
+      "sector": "Consumer",
+      "spot": 2450,
+      "vol": 0.23,
+      "divYield": 0.013,
+      "lotSize": 200,
+      "isIndex": false
+    },
+    {
+      "symbol": "NESTLEIND",
+      "name": "Nestle India",
+      "sector": "FMCG",
+      "spot": 2200,
+      "vol": 0.19,
+      "divYield": 0.015,
+      "lotSize": 250,
+      "isIndex": false
+    },
+    {
+      "symbol": "ULTRACEMCO",
+      "name": "UltraTech Cement",
+      "sector": "Cement",
+      "spot": 11400,
+      "vol": 0.25,
+      "divYield": 0.006,
+      "lotSize": 50,
+      "isIndex": false
+    },
+    {
+      "symbol": "GRASIM",
+      "name": "Grasim Industries",
+      "sector": "Cement",
+      "spot": 2750,
+      "vol": 0.26,
+      "divYield": 0.005,
+      "lotSize": 200,
+      "isIndex": false
+    },
+    {
+      "symbol": "COALINDIA",
+      "name": "Coal India",
+      "sector": "Mining",
+      "spot": 400,
+      "vol": 0.27,
+      "divYield": 0.065,
+      "lotSize": 2700,
+      "isIndex": false
+    },
+    {
+      "symbol": "WIPRO",
+      "name": "Wipro",
+      "sector": "IT",
+      "spot": 285,
+      "vol": 0.27,
+      "divYield": 0.007,
+      "lotSize": 3000,
+      "isIndex": false
+    },
+    {
+      "symbol": "HCLTECH",
+      "name": "HCL Technologies",
+      "sector": "IT",
+      "spot": 1780,
+      "vol": 0.24,
+      "divYield": 0.037,
+      "lotSize": 350,
+      "isIndex": false
+    },
+    {
+      "symbol": "TECHM",
+      "name": "Tech Mahindra",
+      "sector": "IT",
+      "spot": 1650,
+      "vol": 0.28,
+      "divYield": 0.028,
+      "lotSize": 400,
+      "isIndex": false
+    },
+    {
+      "symbol": "TITAN",
+      "name": "Titan Company",
+      "sector": "Consumer",
+      "spot": 3480,
+      "vol": 0.26,
+      "divYield": 0.004,
+      "lotSize": 175,
+      "isIndex": false
+    },
+    {
+      "symbol": "BAJAJ-AUTO",
+      "name": "Bajaj Auto",
+      "sector": "Auto",
+      "spot": 9300,
+      "vol": 0.29,
+      "divYield": 0.008,
+      "lotSize": 75,
+      "isIndex": false
+    },
+    {
+      "symbol": "EICHERMOT",
+      "name": "Eicher Motors",
+      "sector": "Auto",
+      "spot": 5200,
+      "vol": 0.28,
+      "divYield": 0.007,
+      "lotSize": 175,
+      "isIndex": false
+    },
+    {
+      "symbol": "HEROMOTOCO",
+      "name": "Hero MotoCorp",
+      "sector": "Auto",
+      "spot": 5100,
+      "vol": 0.27,
+      "divYield": 0.022,
+      "lotSize": 150,
+      "isIndex": false
+    },
+    {
+      "symbol": "INDUSINDBK",
+      "name": "IndusInd Bank",
+      "sector": "Banking",
+      "spot": 850,
+      "vol": 0.4,
+      "divYield": 0.006,
+      "lotSize": 900,
+      "isIndex": false
+    },
+    {
+      "symbol": "SBILIFE",
+      "name": "SBI Life Insurance",
+      "sector": "Insurance",
+      "spot": 1650,
+      "vol": 0.24,
+      "divYield": 0.004,
+      "lotSize": 375,
+      "isIndex": false
+    },
+    {
+      "symbol": "HDFCLIFE",
+      "name": "HDFC Life Insurance",
+      "sector": "Insurance",
+      "spot": 730,
+      "vol": 0.25,
+      "divYield": 0.006,
+      "lotSize": 1100,
+      "isIndex": false
+    },
+    {
+      "symbol": "BPCL",
+      "name": "Bharat Petroleum",
+      "sector": "Energy",
+      "spot": 340,
+      "vol": 0.3,
+      "divYield": 0.041,
+      "lotSize": 1800,
+      "isIndex": false
+    },
+    {
+      "symbol": "VEDANTA",
+      "name": "Vedanta Limited",
+      "sector": "Metals",
+      "spot": 470,
+      "vol": 0.38,
+      "divYield": 0.09,
+      "lotSize": 2150,
+      "isIndex": false
+    },
+    {
+      "symbol": "ZOMATO",
+      "name": "Eternal (Zomato)",
+      "sector": "Internet",
+      "spot": 275,
+      "vol": 0.45,
+      "divYield": 0.0,
+      "lotSize": 3425,
+      "isIndex": false
+    },
+    {
+      "symbol": "DLF",
+      "name": "DLF Limited",
+      "sector": "Realty",
+      "spot": 780,
+      "vol": 0.33,
+      "divYield": 0.007,
+      "lotSize": 825,
+      "isIndex": false
+    },
+    {
+      "symbol": "TATACONSUM",
+      "name": "Tata Consumer Products",
+      "sector": "FMCG",
+      "spot": 1080,
+      "vol": 0.24,
+      "divYield": 0.01,
+      "lotSize": 550,
+      "isIndex": false
+    },
+    {
+      "symbol": "APOLLOHOSP",
+      "name": "Apollo Hospitals",
+      "sector": "Healthcare",
+      "spot": 7100,
+      "vol": 0.26,
+      "divYield": 0.003,
+      "lotSize": 125,
+      "isIndex": false
+    },
+    {
+      "symbol": "BRITANNIA",
+      "name": "Britannia Industries",
+      "sector": "FMCG",
+      "spot": 5450,
+      "vol": 0.21,
+      "divYield": 0.015,
+      "lotSize": 200,
+      "isIndex": false
+    }
+  ]
+}
