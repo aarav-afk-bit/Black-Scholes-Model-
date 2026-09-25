@@ -4,8 +4,11 @@ Options Terminal — Backend API
 Endpoints:
   GET /api/health
   GET /api/symbols
-  GET /api/option-chain/<symbol>
+  GET /api/option-chain/<symbol>?expiry=..
   GET /api/analyze/<symbol>?strike=..&expiry=..&type=call|put&r=..&q=..&sigma=..
+
+  Units for /api/analyze: r is a decimal (0.065 = 6.5%), q and sigma are
+  percentages (1.2 = 1.2%).
 
 Run:
   pip install -r requirements.txt
@@ -14,8 +17,10 @@ Run:
 """
 
 import json
+import math
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -39,6 +44,7 @@ _allowed_origins = os.environ.get("FRONTEND_ORIGIN", "*")
 CORS(app, origins=_allowed_origins.split(",") if _allowed_origins != "*" else "*")
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+IST = ZoneInfo("Asia/Kolkata")
 
 
 # ------------------------------------------------------------------
@@ -64,8 +70,20 @@ def _leg_summary(leg):
 
 def _days_to_expiry(expiry_str):
     expiry_dt = datetime.strptime(expiry_str, "%d-%b-%Y")
-    delta_days = (expiry_dt.date() - datetime.now().date()).days
+    # NSE expiries are Indian dates; the server (e.g. Render) runs in UTC.
+    delta_days = (expiry_dt.date() - datetime.now(IST).date()).days
     return max(delta_days, 0) + 1  # settlement-day inclusive, floor at 1 day
+
+
+def _float_arg(name, default=None):
+    """Parse an optional numeric query param; raises ValueError on junk/NaN."""
+    raw = request.args.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    value = float(raw)
+    if not math.isfinite(value):
+        raise ValueError(name)
+    return value
 
 
 # ------------------------------------------------------------------
@@ -74,7 +92,7 @@ def _days_to_expiry(expiry_str):
 
 @app.route("/api/health")
 def health():
-    return jsonify({"status": "ok", "time": datetime.utcnow().isoformat()})
+    return jsonify({"status": "ok", "time": datetime.now(timezone.utc).isoformat()})
 
 
 @app.route("/api/symbols")
@@ -92,8 +110,9 @@ def option_chain(symbol):
     NSE, pulled directly from NSE's option-chain API — no manual data entry.
     """
     symbol = symbol.upper()
+    expiry = request.args.get("expiry") or None
     try:
-        raw = nse_client.get_option_chain(symbol)
+        raw = nse_client.get_option_chain(symbol, expiry=expiry)
     except RuntimeError as exc:
         return jsonify({"error": f"could not fetch live NSE data: {exc}"}), 502
 
@@ -121,7 +140,7 @@ def option_chain(symbol):
         "expiries": expiries,
         "strikes": sorted(strikes_set),
         "chain": chain,
-        "fetchedAt": datetime.utcnow().isoformat(),
+        "fetchedAt": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -137,19 +156,25 @@ def analyze(symbol):
     try:
         strike = float(request.args["strike"])
         expiry = request.args["expiry"]
+        datetime.strptime(expiry, "%d-%b-%Y")
     except (KeyError, ValueError):
-        return jsonify({"error": "strike and expiry query params are required"}), 400
+        return jsonify({"error": "strike and expiry (DD-Mon-YYYY) query params are required"}), 400
 
     option_type = request.args.get("type", "call").lower()
     if option_type not in ("call", "put"):
         return jsonify({"error": "type must be 'call' or 'put'"}), 400
 
-    r = float(request.args.get("r", 0.065))
-    q_override = request.args.get("q")
-    sigma_override = request.args.get("sigma")
+    try:
+        r = _float_arg("r", 0.065)
+        q_override = _float_arg("q")
+        sigma_override = _float_arg("sigma")
+    except ValueError:
+        return jsonify({"error": "r, q and sigma must be numbers"}), 400
+    if sigma_override is not None and sigma_override <= 0:
+        return jsonify({"error": "sigma must be a positive percentage"}), 400
 
     try:
-        raw = nse_client.get_option_chain(symbol)
+        raw = nse_client.get_option_chain(symbol, expiry=expiry)
     except RuntimeError as exc:
         return jsonify({"error": f"could not fetch live NSE data: {exc}"}), 502
 
@@ -160,7 +185,8 @@ def analyze(symbol):
 
     row = next(
         (d for d in records.get("data", [])
-         if d.get("expiryDate") == expiry and d.get("strikePrice") == strike),
+         if d.get("expiryDate") == expiry
+         and abs(float(d.get("strikePrice")) - strike) < 1e-6),
         None,
     )
     if row is None:
@@ -176,14 +202,14 @@ def analyze(symbol):
     days = _days_to_expiry(expiry)
     T = days / 365
 
-    if sigma_override:
-        sigma = float(sigma_override) / 100
+    if sigma_override is not None:
+        sigma = sigma_override / 100
     elif nse_iv:
         sigma = nse_iv / 100
     else:
         sigma = 0.25  # fallback when NSE hasn't computed an IV yet (e.g. illiquid strike)
 
-    q = float(q_override) / 100 if q_override else 0.0
+    q = q_override / 100 if q_override is not None else 0.0
 
     bs = black_scholes(spot, strike, T, r, sigma, q)
     gk = greeks(spot, strike, T, r, sigma, q)
@@ -221,7 +247,7 @@ def analyze(symbol):
         "monteCarlo": {"price": mc_price, "stdError": mc_se},
         "impliedVolatility": {"solved": solved_iv, "nseReported": (nse_iv / 100) if nse_iv else None},
         "suggestion": suggestion,
-        "fetchedAt": datetime.utcnow().isoformat(),
+        "fetchedAt": datetime.now(timezone.utc).isoformat(),
     })
 
 

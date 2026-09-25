@@ -3,8 +3,12 @@ services:
     name: options-terminal-backend
     env: python
     plan: free
+    rootDir: options-backend
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # NSE calls (with retries) can exceed gunicorn's default 30s worker timeout.
+    startCommand: gunicorn app:app --timeout 120 --workers 1 --threads 4
     envVars:
+      - key: PYTHON_VERSION   # Render ignores runtime.txt; numpy 1.26 needs <= 3.12
+        value: "3.11.9"
       - key: FRONTEND_ORIGIN
         value: "*"   # replace with your Vercel URL after the frontend is deployed, e.g. https://options-terminal.vercel.app

@@ -124,7 +124,7 @@ function buildSuggestionLocal(K, type, fairValue, marketPrice, gk){
   const theta = (type==='call' ? gk.callTheta : gk.putTheta)/365;
   const zoneLow = fairValue*0.97, zoneHigh = fairValue*1.01;
   const base = { fairValue, thetaPerDay: theta, thetaFiveDay: theta*5, zoneLow, zoneHigh };
-  if(!marketPrice){
+  if(!marketPrice || fairValue <= 1e-8){
     return Object.assign(base, {
       verdict:'MODEL_FAIR_VALUE', headline:'MODEL FAIR VALUE', suggestedEntry: fairValue,
       reasoning: `No live premium supplied — this is the theoretical fair value. Reasonable entry zone: ${zoneLow.toFixed(2)} to ${zoneHigh.toFixed(2)}.`
