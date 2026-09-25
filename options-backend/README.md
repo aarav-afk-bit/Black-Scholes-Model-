@@ -19,6 +19,30 @@ python app.py
 
 Runs on `http://localhost:5000`.
 
+## Deploying on Render
+
+**New service (Blueprint):** Render dashboard → **New → Blueprint** → pick this
+repo. Render reads `render.yaml` from the repo root and creates the web
+service with everything below already filled in.
+
+**Existing service (set up by hand):** open it → **Settings** and set:
+
+| Setting | Value |
+|---|---|
+| Root Directory | `options-backend` |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `gunicorn app:app --timeout 120 --workers 1 --threads 4` |
+| Health Check Path | `/api/health` |
+| Env var `PYTHON_VERSION` | `3.11.9` |
+| Env var `FRONTEND_ORIGIN` | your Vercel URL (or `*`) |
+
+Then **Manual Deploy → Deploy latest commit**. Check
+`https://<your-service>.onrender.com/api/health` returns `{"status": "ok"}`,
+and put that base URL in `options-frontend/js/config.js`.
+
+The free plan sleeps after ~15 minutes idle; the first request afterwards
+takes ~30–60s (the frontend retries while it wakes up).
+
 ## How the NSE fetch works
 
 `nse_client.py` opens a `requests.Session()`, first loads `nseindia.com` and
