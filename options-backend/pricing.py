@@ -159,7 +159,9 @@ def build_suggestion(K, option_type, fair_value, market_price, greeks_dict):
         "fairValueZone": {"low": round(zone_low, 4), "high": round(zone_high, 4)},
     }
 
-    if market_price is None:
+    # A deep OTM contract can have a model value of ~0, which would make the
+    # mispricing % below divide by zero — treat it like "no comparison".
+    if market_price is None or fair_value <= 1e-8:
         result.update({
             "verdict": "MODEL_FAIR_VALUE",
             "headline": "MODEL FAIR VALUE",

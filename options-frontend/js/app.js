@@ -96,16 +96,20 @@ async function selectSymbol(symbol){
 
   try{
     const chain = await Api.optionChain(symbol);
+    if(symbol !== currentSymbol) return;   // user picked another symbol meanwhile
     currentChain = chain;
     document.getElementById('pSpot').value = chain.spot ?? '';
 
-    expirySel.innerHTML = chain.expiries.map(e=>`<option value="${e}">${e}</option>`).join('');
+    const expiries = chain.expiries.length ? chain.expiries : Object.keys(chain.chain);
+    if(!expiries.length) throw new Error('NSE returned no expiries for this symbol');
+    expirySel.innerHTML = expiries.map(e=>`<option value="${e}">${e}</option>`).join('');
     expirySel.disabled = false;
-    populateStrikesForExpiry(chain.expiries[0]);
-    expirySel.value = chain.expiries[0];
+    expirySel.value = expiries[0];
+    populateStrikesForExpiry(expiries[0]);
 
     setStatus('LIVE CHAIN LOADED — ' + symbol, 'ok');
   }catch(err){
+    if(symbol !== currentSymbol) return;
     setStatus('LIVE FETCH FAILED — ' + symbol, 'error');
     showError(`Could not load the live NSE option chain for ${symbol}: ${err.message}. Make sure the backend (app.py) is running and reachable at ${API_BASE}, and that NSE isn't rate-limiting this connection.`);
     expirySel.innerHTML = '<option>—</option>';
@@ -126,12 +130,45 @@ function populateStrikesForExpiry(expiry){
   strikeSel.selectedIndex = atmIdx;
   document.getElementById('pStrike').value = strikesForExpiry[atmIdx];
 
-  const days = Math.max(Math.ceil((new Date(expiry.replace(/-/g,' ')) - new Date())/86400000), 1);
-  document.getElementById('pDays').value = days;
+  document.getElementById('pDays').value = daysToExpiry(expiry);
 }
 
-document.getElementById('expirySelect').addEventListener('change', (e)=>{
-  populateStrikesForExpiry(e.target.value);
+/* NSE expiry strings look like "28-Aug-2025". Parse them by hand — Safari
+   and some Firefox versions return Invalid Date for "28 Aug 2025". Counts
+   calendar days settlement-inclusive, matching the backend's _days_to_expiry. */
+const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function daysToExpiry(expiry){
+  const [dd, mon, yyyy] = String(expiry).split('-');
+  const m = MONTHS[(mon||'').slice(0,3).toLowerCase()];
+  if(m===undefined) return 1;
+  const expiryUTC = Date.UTC(+yyyy, m, +dd);
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(Math.round((expiryUTC - todayUTC)/86400000), 0) + 1;
+}
+
+/* NSE's v3 API serves one expiry per request, so switching expiry fetches
+   that expiry's strikes if we don't already have them. */
+document.getElementById('expirySelect').addEventListener('change', async (e)=>{
+  const expiry = e.target.value;
+  if(currentChain && currentChain.chain[expiry]){ populateStrikesForExpiry(expiry); return; }
+  const symbol = currentSymbol;
+  const strikeSel = document.getElementById('strikeSelect');
+  strikeSel.disabled = true;
+  strikeSel.innerHTML = '<option>loading…</option>';
+  setStatus(`FETCHING ${symbol} ${expiry}`, 'pending');
+  try{
+    const chain = await Api.optionChain(symbol, expiry);
+    if(symbol !== currentSymbol) return;
+    Object.assign(currentChain.chain, chain.chain);
+    if(chain.spot != null){ currentChain.spot = chain.spot; document.getElementById('pSpot').value = chain.spot; }
+    populateStrikesForExpiry(expiry);
+    setStatus('LIVE CHAIN LOADED — ' + symbol, 'ok');
+  }catch(err){
+    setStatus('LIVE FETCH FAILED — ' + symbol, 'error');
+    showError(`Could not load strikes for ${symbol} ${expiry}: ${err.message}`);
+    strikeSel.innerHTML = '<option>—</option>';
+  }
 });
 document.getElementById('strikeSelect').addEventListener('change', (e)=>{
   document.getElementById('pStrike').value = e.target.value;
@@ -160,12 +197,16 @@ async function fetchLiveAndAnalyze(){
   const strike = document.getElementById('strikeSelect').value;
   if(!expiry || !strike){ showError('Pick an expiry and strike first.'); return; }
 
-  const r = parseFloat(document.getElementById('pRate').value)/100;
-  const q = parseFloat(document.getElementById('pDiv').value)/100;
+  // Backend units: r as a decimal, q as a percentage (it divides q by 100 itself).
+  const ratePct = parseFloat(document.getElementById('pRate').value);
+  const divPct = parseFloat(document.getElementById('pDiv').value);
+  const params = { strike, expiry, type: optionType };
+  if(!isNaN(ratePct)) params.r = ratePct/100;
+  if(!isNaN(divPct)) params.q = divPct;
 
   setStatus('RUNNING LIVE ANALYSIS…', 'pending');
   try{
-    const data = await Api.analyze(currentSymbol, { strike, expiry, type: optionType, r, q });
+    const data = await Api.analyze(currentSymbol, params);
     applyAnalysis(data);
     setStatus(`LIVE — ${currentSymbol} ${strike} ${optionType.toUpperCase()} · ${expiry}`, 'ok');
   }catch(err){
@@ -228,7 +269,7 @@ function recalcLocal(){
   const q = parseFloat(document.getElementById('pDiv').value)/100;
   const market = document.getElementById('pMarket').value ? parseFloat(document.getElementById('pMarket').value) : null;
 
-  if(!S || !K || !days || S<=0 || K<=0 || !sigma){ showError('Fill in spot, strike, days and volatility before recalculating.'); return; }
+  if(!S || !K || !days || S<=0 || K<=0 || days<=0 || !(sigma>0) || isNaN(r) || isNaN(q)){ showError('Fill in spot, strike, days, rate, dividend yield and volatility before recalculating.'); return; }
   const T = days/365;
   const isCall = optionType==='call';
 
@@ -468,5 +509,19 @@ function renderCharts(p, T, isCall){
 ============================================================ */
 (async function init(){
   await loadCompanies();
-  Api.health().then(()=> setStatus('BACKEND CONNECTED — SEARCH A SYMBOL')).catch(()=> setStatus('BACKEND UNREACHABLE — START app.py', 'error'));
+  // Free Render instances sleep when idle and take ~30-60s to wake, so the
+  // first health check often fails. Keep retrying for a while before giving up.
+  setStatus('CONNECTING TO BACKEND…', 'pending');
+  for(let attempt=1; attempt<=8; attempt++){
+    try{
+      await Api.health();
+      setStatus('BACKEND CONNECTED — SEARCH A SYMBOL');
+      return;
+    }catch(e){
+      setStatus(`WAKING BACKEND… (attempt ${attempt}/8)`, 'pending');
+      await new Promise(res=>setTimeout(res, 8000));
+    }
+  }
+  setStatus('BACKEND UNREACHABLE', 'error');
+  showError(`Could not reach the backend at ${API_BASE}. Check that it is deployed and running.`);
 })();

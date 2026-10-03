@@ -1,9 +1,16 @@
 """
 Lightweight client for NSE India's public (unofficial) option-chain API.
 
-NSE serves option chain data as JSON from:
-  https://www.nseindia.com/api/option-chain-equities?symbol=RELIANCE
-  https://www.nseindia.com/api/option-chain-indices?symbol=NIFTY
+NSE serves option chain data as JSON from (current "v3" API):
+  https://www.nseindia.com/api/option-chain-contract-info?symbol=NIFTY
+      -> list of live expiry dates (and strikes) for the symbol
+  https://www.nseindia.com/api/option-chain-v3?type=Indices&symbol=NIFTY&expiry=30-Sep-2025
+  https://www.nseindia.com/api/option-chain-v3?type=Equity&symbol=RELIANCE&expiry=30-Sep-2025
+      -> the chain for ONE expiry
+
+The older endpoints (api/option-chain-indices / api/option-chain-equities)
+were retired by NSE in 2025 and now return an empty `{}`; they are only kept
+here as a fallback.
 
 These endpoints are only reachable with a browser-like session: you must first
 load nseindia.com in the same requests.Session() so it hands you the cookies
@@ -33,10 +40,14 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept": "*/*",
+    "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    # No "br": requests can't decode Brotli unless the optional `brotli`
+    # package is installed, and NSE happily answers in Brotli when offered —
+    # which made every response look like "invalid JSON".
+    "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
+    "Referer": "https://www.nseindia.com/option-chain",
 }
 
 INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"}
@@ -90,22 +101,81 @@ class NSEClient:
 
         raise RuntimeError(f"NSE request failed for {url} (last status: {last_status})")
 
-    def get_option_chain(self, symbol, is_index=None):
+    def _cached(self, key, fetch):
+        with self._lock:
+            cached = self._cache.get(key)
+            if cached and time.time() - cached[0] < self.cache_ttl:
+                return cached[1]
+        data = fetch()
+        with self._lock:
+            self._cache[key] = (time.time(), data)
+        return data
+
+    def get_expiries(self, symbol):
+        """Live expiry dates (NSE 'DD-Mon-YYYY' strings, nearest first)."""
+        symbol = symbol.upper()
+
+        def fetch():
+            info = self._get_json(
+                f"{NSE_BASE}/api/option-chain-contract-info", params={"symbol": symbol}
+            )
+            return (info or {}).get("expiryDates") or []
+
+        return self._cached(f"expiries:{symbol}", fetch)
+
+    def get_option_chain(self, symbol, expiry=None, is_index=None):
+        """
+        Option chain for `symbol`, normalised to the classic shape:
+          {"records": {"underlyingValue", "expiryDates", "data": [
+              {"expiryDate", "strikePrice", "CE": {...}, "PE": {...}}, ...]}}
+        `expiry` defaults to the nearest one.
+        """
         symbol = symbol.upper()
         if is_index is None:
             is_index = symbol in INDEX_SYMBOLS
 
-        cache_key = f"chain:{symbol}"
-        with self._lock:
-            cached = self._cache.get(cache_key)
-            if cached and time.time() - cached[0] < self.cache_ttl:
-                return cached[1]
+        expiries = []
+        v3_error = None
+        try:
+            expiries = self.get_expiries(symbol)
+        except RuntimeError as exc:
+            v3_error = exc
 
+        if expiries:
+            expiry = expiry or expiries[0]
+
+            def fetch_v3():
+                return self._get_json(
+                    f"{NSE_BASE}/api/option-chain-v3",
+                    params={
+                        "type": "Indices" if is_index else "Equity",
+                        "symbol": symbol,
+                        "expiry": expiry,
+                    },
+                )
+
+            try:
+                raw = self._cached(f"chain:{symbol}:{expiry}", fetch_v3)
+                data = _normalise(raw, expiries)
+                if data["records"]["data"]:
+                    return data
+            except RuntimeError as exc:
+                v3_error = exc
+
+        # Fallback: legacy endpoint (returns every expiry in one go).
         endpoint = "api/option-chain-indices" if is_index else "api/option-chain-equities"
-        data = self._get_json(f"{NSE_BASE}/{endpoint}", params={"symbol": symbol})
 
-        with self._lock:
-            self._cache[cache_key] = (time.time(), data)
+        def fetch_legacy():
+            return self._get_json(f"{NSE_BASE}/{endpoint}", params={"symbol": symbol})
+
+        raw = self._cached(f"legacy:{symbol}", fetch_legacy)
+        data = _normalise(raw, expiries)
+        if not data["records"]["data"]:
+            reason = f" ({v3_error})" if v3_error else ""
+            raise RuntimeError(
+                f"NSE returned an empty option chain for {symbol}{reason}. "
+                "Check the symbol has F&O contracts, or NSE may be blocking this server's IP."
+            )
         return data
 
     def get_quote(self, symbol, is_index=False):
@@ -114,6 +184,32 @@ class NSEClient:
         endpoint = "api/equity-stockIndices" if is_index else "api/quote-equity"
         params = {"index": symbol} if is_index else {"symbol": symbol}
         return self._get_json(f"{NSE_BASE}/{endpoint}", params=params)
+
+
+def _normalise(raw, expiries=None):
+    """Map v3 / legacy NSE payloads onto one shape the API layer can rely on."""
+    records = (raw or {}).get("records") or {}
+    rows = []
+    spot = records.get("underlyingValue")
+    for row in records.get("data") or []:
+        ce, pe = row.get("CE"), row.get("PE")
+        leg = ce or pe or {}
+        # v3 names the per-row key "expiryDates" (plural); legacy used "expiryDate".
+        expiry = row.get("expiryDate") or row.get("expiryDates") or leg.get("expiryDate")
+        strike = row.get("strikePrice", leg.get("strikePrice"))
+        if expiry is None or strike is None:
+            continue
+        if spot is None:
+            spot = leg.get("underlyingValue")
+        rows.append({"expiryDate": expiry, "strikePrice": strike, "CE": ce, "PE": pe})
+
+    return {
+        "records": {
+            "underlyingValue": spot,
+            "expiryDates": expiries or records.get("expiryDates") or [],
+            "data": rows,
+        }
+    }
 
 
 # Single shared client instance for the whole Flask process.

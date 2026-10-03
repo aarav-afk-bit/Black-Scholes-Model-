@@ -1,0 +1,19 @@
+# Render Blueprint for the Flask backend (options-backend/).
+# Render → New → Blueprint → pick this repo; it reads this file from the repo root.
+services:
+  - type: web
+    name: options-terminal-backend
+    runtime: python
+    plan: free
+    rootDir: options-backend
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    # NSE calls (with retries) can exceed gunicorn's default 30s worker timeout.
+    startCommand: gunicorn app:app --timeout 120 --workers 1 --threads 4
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION   # Render ignores runtime.txt; numpy 1.26 needs <= 3.12
+        value: "3.11.9"
+      - key: FRONTEND_ORIGIN
+        value: "*"   # replace with your Vercel URL, e.g. https://options-terminal.vercel.app
