@@ -131,6 +131,7 @@ function populateStrikesForExpiry(expiry){
   document.getElementById('pStrike').value = strikesForExpiry[atmIdx];
 
   document.getElementById('pDays').value = daysToExpiry(expiry);
+  renderChainTable(expiry);
 }
 
 /* NSE expiry strings look like "28-Aug-2025". Parse them by hand — Safari
@@ -173,6 +174,85 @@ document.getElementById('expirySelect').addEventListener('change', async (e)=>{
 document.getElementById('strikeSelect').addEventListener('change', (e)=>{
   document.getElementById('pStrike').value = e.target.value;
 });
+
+/* ============================================================
+   OPTION CHAIN TABLE (strikes x CE/PE for the selected expiry)
+============================================================ */
+const fmtInt = (v)=> (v===null||v===undefined||isNaN(v)) ? '—' : Number(v).toLocaleString('en-IN');
+
+/* Put-call ratio by open interest, and max pain: the expiry price at which
+   option holders (all strikes, calls + puts) would collect the least. */
+function chainStats(rows){
+  let callOI=0, putOI=0;
+  rows.forEach(r=>{ callOI += r.CE?.openInterest||0; putOI += r.PE?.openInterest||0; });
+  let maxPain=null, minPayout=Infinity;
+  rows.forEach(({strike:settle})=>{
+    let payout = 0;
+    rows.forEach(r=>{
+      payout += Math.max(settle-r.strike,0)*(r.CE?.openInterest||0) + Math.max(r.strike-settle,0)*(r.PE?.openInterest||0);
+    });
+    if(payout<minPayout){ minPayout=payout; maxPain=settle; }
+  });
+  return { pcr: callOI ? putOI/callOI : null, maxPain: (callOI||putOI) ? maxPain : null };
+}
+
+function renderChainTable(expiry){
+  const tbody = document.querySelector('#chainTable tbody');
+  const legs = currentChain && currentChain.chain[expiry];
+  if(!legs){ tbody.innerHTML = '<tr><td colspan="9" class="empty">No chain data for this expiry.</td></tr>'; return; }
+  const spot = currentChain.spot;
+  const rows = Object.keys(legs).map(k=>({strike:Number(k), CE:legs[k].CE, PE:legs[k].PE})).sort((a,b)=>a.strike-b.strike);
+  let atm = rows[0]?.strike;
+  rows.forEach(r=>{ if(Math.abs(r.strike-spot) < Math.abs(atm-spot)) atm = r.strike; });
+  const selected = Number(document.getElementById('strikeSelect').value);
+  const chgCls = (v)=> v>0 ? 'up' : v<0 ? 'down' : '';
+  const ivTxt = (v)=> v ? Number(v).toFixed(1) : '—';
+  const ltpTxt = (v)=> v ? Number(v).toFixed(2) : '—';
+
+  tbody.innerHTML = rows.map(r=>{
+    const c = r.CE||{}, p = r.PE||{};
+    const cItm = r.strike < spot ? ' itm-call' : '', pItm = r.strike > spot ? ' itm-put' : '';
+    const cls = [r.strike===atm?'atm':'', r.strike===selected?'selected':''].join(' ');
+    return `<tr class="${cls}" data-strike="${r.strike}">
+      <td class="${cItm}" data-side="call">${fmtInt(c.openInterest)}</td>
+      <td class="${chgCls(c.changeInOpenInterest)}${cItm}" data-side="call">${fmtInt(c.changeInOpenInterest)}</td>
+      <td class="${cItm}" data-side="call">${ivTxt(c.impliedVolatility)}</td>
+      <td class="ltp${cItm}" data-side="call">${ltpTxt(c.lastPrice)}</td>
+      <td class="strike">${r.strike}</td>
+      <td class="ltp${pItm}" data-side="put">${ltpTxt(p.lastPrice)}</td>
+      <td class="${pItm}" data-side="put">${ivTxt(p.impliedVolatility)}</td>
+      <td class="${chgCls(p.changeInOpenInterest)}${pItm}" data-side="put">${fmtInt(p.changeInOpenInterest)}</td>
+      <td class="${pItm}" data-side="put">${fmtInt(p.openInterest)}</td>
+    </tr>`;
+  }).join('');
+
+  const { pcr, maxPain } = chainStats(rows);
+  document.getElementById('chainStats').textContent =
+    `${expiry} · spot ${fmtInt(spot)} · PCR ${pcr!=null ? pcr.toFixed(2) : '—'} · max pain ${maxPain ?? '—'}`;
+
+  const wrap = tbody.closest('.chain-wrap');
+  const atmRow = tbody.querySelector('tr.atm');
+  if(atmRow) wrap.scrollTop = atmRow.offsetTop - wrap.clientHeight/2;
+}
+
+function highlightChainStrike(strike){
+  document.querySelectorAll('#chainTable tbody tr').forEach(tr=>{
+    tr.classList.toggle('selected', Number(tr.dataset.strike)===Number(strike));
+  });
+}
+
+// Click a row to select that strike; clicking the call or put side also picks the option type.
+document.querySelector('#chainTable tbody').addEventListener('click', (e)=>{
+  const tr = e.target.closest('tr[data-strike]');
+  if(!tr) return;
+  const strikeSel = document.getElementById('strikeSelect');
+  strikeSel.value = tr.dataset.strike;
+  document.getElementById('pStrike').value = tr.dataset.strike;
+  const side = e.target.closest('td')?.dataset.side;
+  if(side){ optionType = side; syncToggle(); }
+  highlightChainStrike(tr.dataset.strike);
+});
+document.getElementById('strikeSelect').addEventListener('change', (e)=> highlightChainStrike(e.target.value));
 
 /* ============================================================
    OPTION TYPE TOGGLE
