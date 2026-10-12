@@ -104,18 +104,29 @@ def crr_price(S, K, T, r, sigma, q=0.0, steps=150, option_type="call", american=
 
 
 def monte_carlo(S, K, T, r, sigma, q=0.0, simulations=30000, option_type="call", seed=42):
-    """Monte Carlo estimate of the European option price with standard error."""
+    """
+    Monte Carlo estimate of the European option price with standard error.
+
+    Uses antithetic variates: every normal draw Z is paired with -Z and the
+    two payoffs are averaged. Same number of simulated paths, noticeably
+    lower standard error, because the pair's errors partly cancel.
+    """
     rng = np.random.default_rng(seed)
-    Z = rng.standard_normal(simulations)
-    ST = S * np.exp((r - q - 0.5 * sigma ** 2) * T + sigma * np.sqrt(T) * Z)
+    pairs = max(simulations // 2, 1)
+    Z = rng.standard_normal(pairs)
+    drift = (r - q - 0.5 * sigma ** 2) * T
+    diffusion = sigma * np.sqrt(T)
+    ST_up = S * np.exp(drift + diffusion * Z)
+    ST_down = S * np.exp(drift - diffusion * Z)
 
     if option_type.lower() == "call":
-        payoff = np.maximum(ST - K, 0)
+        payoff = 0.5 * (np.maximum(ST_up - K, 0) + np.maximum(ST_down - K, 0))
     else:
-        payoff = np.maximum(K - ST, 0)
+        payoff = 0.5 * (np.maximum(K - ST_up, 0) + np.maximum(K - ST_down, 0))
 
+    # The pair averages are i.i.d., so the standard error is taken over pairs.
     price = np.exp(-r * T) * np.mean(payoff)
-    se = np.exp(-r * T) * np.std(payoff, ddof=1) / np.sqrt(simulations)
+    se = np.exp(-r * T) * np.std(payoff, ddof=1) / np.sqrt(pairs) if pairs > 1 else 0.0
 
     return float(price), float(se)
 
