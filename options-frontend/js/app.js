@@ -457,11 +457,22 @@ function renderCharts(p, T, isCall){
     { label:'Put', data:putVsVol, borderColor:'#ff5c5c', pointRadius:0, borderWidth:2, tension:0.15 }
   ]);
 
-  const timeLabels=[], callVsTime=[], putVsTime=[];
-  for(let i=0;i<=50;i++){ const t=(1/365)+(2-1/365)*i/50; const bs=blackScholes(S,K,t,r,sigma,q); timeLabels.push(t.toFixed(2)); callVsTime.push(bs.call); putVsTime.push(bs.put); }
+  // Decay from today to the actual expiry (not an arbitrary 2-year span): x is
+  // days remaining, so the curve steepens toward the right as theta accelerates.
+  const daysLeft = Math.max(Math.round(T*365), 1);
+  const steps = Math.min(daysLeft, 60);
+  const timeLabels=[], callVsTime=[], putVsTime=[], intrinsic=[];
+  const intrinsicNow = isCall ? Math.max(S-K,0) : Math.max(K-S,0);
+  for(let i=0;i<=steps;i++){
+    const d = daysLeft*(1 - i/steps);
+    const bs = blackScholes(S,K,d/365,r,sigma,q);
+    timeLabels.push(Math.round(d)+'d');
+    callVsTime.push(bs.call); putVsTime.push(bs.put); intrinsic.push(intrinsicNow);
+  }
   makeLineChart('chartVsTime', timeLabels, [
-    { label:'Call', data:callVsTime, borderColor:'#3ddc84', pointRadius:0, borderWidth:2, tension:0.15 },
-    { label:'Put', data:putVsTime, borderColor:'#ff5c5c', pointRadius:0, borderWidth:2, tension:0.15 }
+    { label:'Call', data:callVsTime, borderColor:'#3ddc84', pointRadius:0, borderWidth:isCall?2.5:1.5, tension:0.15 },
+    { label:'Put', data:putVsTime, borderColor:'#ff5c5c', pointRadius:0, borderWidth:isCall?1.5:2.5, tension:0.15 },
+    { label:`${isCall?'Call':'Put'} intrinsic`, data:intrinsic, borderColor:'#5c5d54', pointRadius:0, borderWidth:1, borderDash:[4,3] }
   ]);
 
   const dLabels=[], deltaVals=[], gammaVals=[];
