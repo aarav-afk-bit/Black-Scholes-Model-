@@ -237,6 +237,8 @@ function applyAnalysis(data){
   document.getElementById('ctDays').textContent = data.daysToExpiry;
   document.getElementById('ctStrike').textContent = data.strike;
   document.getElementById('ctType').textContent = data.optionType.toUpperCase();
+  renderProbabilities(data.spot, data.strike, data.daysToExpiry/365, data.inputs.r, data.inputs.sigma, data.inputs.q,
+    data.optionType, data.market.lastPrice, data.optionType==='call' ? data.blackScholes.call : data.blackScholes.put);
 
   // BS / Greeks / CRR / MC / IV cards
   fillResultCards(data.blackScholes, data.greeks, data.crr, data.monteCarlo, data.impliedVolatility, data.inputs.sigma, data.optionType);
@@ -300,6 +302,7 @@ function recalcLocal(){
   document.getElementById('ctDays').textContent = days;
   document.getElementById('ctStrike').textContent = K;
   document.getElementById('ctType').textContent = optionType.toUpperCase();
+  renderProbabilities(S, K, T, r, sigma, q, optionType, market, fairValue);
 
   renderCharts({S,K,r,sigma,q}, T, isCall);
   setStatus('LOCAL RECALC — no backend call', 'ok');
@@ -355,6 +358,33 @@ function fillResultCards(bs, gk, crr, mc, iv, sigmaUsed, type){
   document.getElementById('ivImplied').textContent = iv.solved!=null ? fmtPct(iv.solved) : '—';
   document.getElementById('ivNse').textContent = iv.nseReported!=null ? fmtPct(iv.nseReported) : 'n/a';
   document.getElementById('ivDelta').textContent = iv.solved!=null ? fmtPct(iv.solved-sigmaUsed) : '—';
+}
+
+/* ============================================================
+   RENDER: probability analysis (shared by live + local paths)
+============================================================ */
+function renderProbabilities(S, K, T, r, sigma, q, type, marketPrice, fairValue){
+  // Price the trade at the live premium when there is one, else at model fair value.
+  const premium = marketPrice || fairValue;
+  const m = probabilityMetrics(S, K, T, r, sigma, q, type, premium);
+  const pct = (v)=> fmtPct(v, 1);
+  document.getElementById('probITM').textContent = pct(m.pITM);
+  document.getElementById('probProfit').textContent = pct(m.pProfit);
+  document.getElementById('probTouch').textContent = pct(m.pTouch);
+  document.getElementById('probBEMove').textContent = `${m.breakevenMovePct>=0?'+':''}${pct(m.breakevenMovePct)} → ${fmt(m.breakeven)}`;
+  document.getElementById('probMove').textContent = `± ${fmt(m.expectedMove)} (${pct(sigma*Math.sqrt(T))})`;
+  document.getElementById('probRange').textContent = `${fmt(m.rangeLow,0)} – ${fmt(m.rangeHigh,0)}`;
+
+  const ref = companiesRef.find(c=>c.symbol===currentSymbol);
+  const edgeEl = document.getElementById('probEdge');
+  if(marketPrice && ref && ref.lotSize){
+    const edge = (fairValue - marketPrice) * ref.lotSize;
+    edgeEl.textContent = (edge>=0?'+':'') + fmt(edge) + ` (${ref.lotSize} qty)`;
+    edgeEl.style.color = edge>=0 ? 'var(--green)' : 'var(--red)';
+  } else {
+    edgeEl.textContent = marketPrice ? 'lot size unknown' : 'needs market premium';
+    edgeEl.style.color = '';
+  }
 }
 
 /* ============================================================
