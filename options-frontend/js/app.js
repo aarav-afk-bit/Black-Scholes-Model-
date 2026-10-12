@@ -254,6 +254,8 @@ function applyAnalysis(data){
 
   // Charts (client-side, using the live-derived inputs)
   renderCharts({ S:data.spot, K:data.strike, r:data.inputs.r, sigma:data.inputs.sigma, q:data.inputs.q }, data.daysToExpiry/365, data.optionType==='call');
+  renderScenarios({ S:data.spot, K:data.strike, r:data.inputs.r, sigma:data.inputs.sigma, q:data.inputs.q }, data.daysToExpiry,
+    data.optionType, data.market.lastPrice || (data.optionType==='call' ? data.blackScholes.call : data.blackScholes.put));
 }
 
 /* ============================================================
@@ -302,6 +304,7 @@ function recalcLocal(){
   document.getElementById('ctType').textContent = optionType.toUpperCase();
 
   renderCharts({S,K,r,sigma,q}, T, isCall);
+  renderScenarios({S,K,r,sigma,q}, days, optionType, market || fairValue);
   setStatus('LOCAL RECALC — no backend call', 'ok');
 }
 
@@ -408,6 +411,50 @@ function renderSuggestionFromServer(sug, optionType){
     OVERPRICED:'Premium is well above model fair value.',
     MODEL_FAIR_VALUE:'No live premium entered yet.'
   }[sug.verdict] || '';
+}
+
+/* ============================================================
+   SCENARIO P&L (spot move x time elapsed, long position)
+============================================================ */
+const SCENARIO_MOVES = [-0.10, -0.05, -0.02, 0, 0.02, 0.05, 0.10];
+
+// Compact INR for the narrow sidebar: 1.2k, 3.4L (lakh), 1.1Cr.
+function fmtCompact(v){
+  const a = Math.abs(v), sign = v>0 ? '+' : v<0 ? '−' : '';
+  if(a>=1e7) return sign + (a/1e7).toFixed(2) + 'Cr';
+  if(a>=1e5) return sign + (a/1e5).toFixed(2) + 'L';
+  if(a>=1e3) return sign + (a/1e3).toFixed(1) + 'k';
+  return sign + a.toFixed(a<10 ? 2 : 0);
+}
+
+function renderScenarios(p, days, type, premium){
+  const tbody = document.querySelector('#scenarioTable tbody');
+  if(!premium || !days){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Needs a premium and days to expiry.</td></tr>'; return; }
+  const ref = companiesRef.find(c=>c.symbol===currentSymbol);
+  const qty = ref && ref.lotSize ? ref.lotSize : 1;
+  document.getElementById('scenarioUnit').textContent = qty>1 ? `per lot (${qty}) · long` : 'per unit · long';
+
+  // Columns are days elapsed: +1 day, halfway, expiry (or just now / expiry when it's that close).
+  const half = Math.floor(days/2);
+  const cols = days>=4
+    ? [{label:'+1d', left:days-1}, {label:`+${half}d`, left:days-half}, {label:'Expiry', left:0}]
+    : [{label:'Now', left:days}, {label:'Expiry', left:0}];
+  document.querySelector('#scenarioTable thead').innerHTML =
+    `<tr><th>Spot</th>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
+
+  const value = (S, d)=>{
+    const bs = blackScholes(S, p.K, d/365, p.r, p.sigma, p.q);
+    return type==='call' ? bs.call : bs.put;
+  };
+  tbody.innerHTML = SCENARIO_MOVES.map(m=>{
+    const S = p.S*(1+m);
+    const cells = cols.map(({left})=>{
+      const pnl = (value(S, left) - premium) * qty;
+      return `<td class="${pnl>0?'pos':pnl<0?'neg':''}">${fmtCompact(pnl)}</td>`;
+    }).join('');
+    const label = m===0 ? 'Flat' : `${m>0?'+':''}${(m*100).toFixed(0)}%`;
+    return `<tr class="${m===0?'now':''}" title="Spot ${fmt(S)}"><td>${label}</td>${cells}</tr>`;
+  }).join('');
 }
 
 /* ============================================================

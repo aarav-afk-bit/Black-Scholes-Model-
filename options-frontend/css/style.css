@@ -184,6 +184,17 @@ table.greeks tr:last-child td{ border-bottom:none; }
 .charts-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(340px,1fr)); gap:12px; }
 
 .check-pass{ color:var(--green); font-family:var(--mono); font-weight:700; }
+
+.scn-unit{ float:right; text-transform:none; letter-spacing:0; color:var(--text-faint); }
+table.scenario{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:10.5px; }
+table.scenario th{ color:var(--text-faint); font-weight:600; font-size:9px; padding:3px 4px; text-align:right; border-bottom:1px solid var(--border); }
+table.scenario td{ padding:4px; text-align:right; border-bottom:1px solid var(--border-soft); color:var(--text-dim); }
+table.scenario th:first-child, table.scenario td:first-child{ text-align:left; }
+table.scenario tr.now td{ background:rgba(255,176,32,0.06); }
+table.scenario td.pos{ color:var(--green); }
+table.scenario td.neg{ color:var(--red); }
+table.scenario td.empty{ text-align:center; color:var(--text-faint); padding:10px; }
+.scn-note{ font-size:9.5px; color:var(--text-faint); margin-top:6px; line-height:1.4; }
 .footer-note{ text-align:center; color:var(--text-faint); font-size:10px; padding:16px 0 8px; font-family:var(--mono); letter-spacing:0.04em; }
 
 .banner{ margin:0 14px; padding:9px 13px; border-radius:8px; font-family:var(--mono); font-size:11px; display:none; }
