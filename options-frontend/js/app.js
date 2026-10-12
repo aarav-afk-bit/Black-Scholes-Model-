@@ -128,6 +128,7 @@ function populateStrikesForExpiry(expiry){
   strikeSel.innerHTML = strikesForExpiry.map(s=>`<option value="${s}">${s}</option>`).join('');
   strikeSel.disabled = false;
   strikeSel.selectedIndex = atmIdx;
+  renderSmile(expiry);
   document.getElementById('pStrike').value = strikesForExpiry[atmIdx];
 
   document.getElementById('pDays').value = daysToExpiry(expiry);
@@ -499,6 +500,58 @@ function renderCharts(p, T, isCall){
       scales:{
         x:{ ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:8.5}, maxTicksLimit:10 }, grid:{ display:false } },
         y:{ ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} }, grid:{ color:'#1d1e18' } }
+      }
+    })
+  });
+}
+
+/* ============================================================
+   IV SMILE (NSE-reported IV across strikes for one expiry)
+============================================================ */
+function ivNearest(points, target){
+  let best = null;
+  points.forEach(p=>{ if(!best || Math.abs(p.x-target) < Math.abs(best.x-target)) best = p; });
+  return best;
+}
+
+function renderSmile(expiry){
+  const legs = currentChain && currentChain.chain[expiry];
+  if(!legs) return;
+  const spot = currentChain.spot;
+  const strikes = Object.keys(legs).map(Number).sort((a,b)=>a-b);
+  // NSE reports IV 0 for strikes that haven't traded; leave those out.
+  const callPts = strikes.filter(k=>legs[k].CE?.impliedVolatility>0).map(k=>({x:k, y:legs[k].CE.impliedVolatility}));
+  const putPts  = strikes.filter(k=>legs[k].PE?.impliedVolatility>0).map(k=>({x:k, y:legs[k].PE.impliedVolatility}));
+  // The usual "OTM smile": put IV below spot, call IV above it.
+  const otmPts = [...putPts.filter(p=>p.x<spot), ...callPts.filter(p=>p.x>=spot)];
+
+  const all = [...callPts, ...putPts].map(p=>p.y);
+  const lo = all.length ? Math.min(...all) : 0, hi = all.length ? Math.max(...all) : 1;
+  const spotLine = [{x:spot, y:lo}, {x:spot, y:hi}];
+
+  const atm = ivNearest(otmPts, spot);
+  const put95 = ivNearest(putPts, spot*0.95), call105 = ivNearest(callPts, spot*1.05);
+  const tag = document.getElementById('smileTag');
+  tag.textContent = atm
+    ? `ATM IV ${atm.y.toFixed(1)}%` + (put95 && call105 ? ` · skew ${(put95.y-call105.y>=0?'+':'')}${(put95.y-call105.y).toFixed(1)} pts` : '')
+    : 'no IV data';
+  tag.title = 'Skew = IV of the ~5% OTM put minus IV of the ~5% OTM call';
+
+  if(charts['chartSmile']) charts['chartSmile'].destroy();
+  const tick = { color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} };
+  charts['chartSmile'] = new Chart(document.getElementById('chartSmile').getContext('2d'), {
+    type:'line',
+    data:{ datasets:[
+      { label:'OTM smile', data:otmPts, borderColor:'#ffb020', pointRadius:2, borderWidth:2, tension:0.25 },
+      { label:'Call IV', data:callPts, borderColor:'rgba(61,220,132,0.6)', pointRadius:0, borderWidth:1, borderDash:[4,3], tension:0.25 },
+      { label:'Put IV', data:putPts, borderColor:'rgba(255,92,92,0.6)', pointRadius:0, borderWidth:1, borderDash:[4,3], tension:0.25 },
+      { label:'Spot', data:spotLine, borderColor:'#7fd4ff', pointRadius:0, borderWidth:1, borderDash:[2,2] }
+    ]},
+    options: baseChartOptions({
+      interaction:{ mode:'nearest', intersect:false },
+      scales:{
+        x:{ type:'linear', ticks:tick, grid:{ color:'#1d1e18' }, title:{ display:true, text:'Strike', color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} } },
+        y:{ ticks:{ ...tick, callback:(v)=>v+'%' }, grid:{ color:'#1d1e18' } }
       }
     })
   });
