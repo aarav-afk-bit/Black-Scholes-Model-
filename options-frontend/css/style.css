@@ -181,6 +181,25 @@ table.greeks td:first-child{ color:var(--text-dim); }
 table.greeks td:last-child{ text-align:right; font-family:var(--mono); font-weight:600; color:var(--text); }
 table.greeks tr:last-child td{ border-bottom:none; }
 
+.chain-wrap{ max-height:380px; overflow:auto; }
+table.chain{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px; }
+table.chain th{ position:sticky; top:0; background:var(--panel2); color:var(--text-faint); font-weight:600; font-size:9.5px; letter-spacing:0.06em; padding:6px 8px; text-align:right; border-bottom:1px solid var(--border); }
+table.chain thead tr:nth-child(2) th{ top:25px; }
+table.chain th.side-call{ color:var(--green); text-align:center; }
+table.chain th.side-put{ color:var(--red); text-align:center; }
+table.chain td{ padding:5px 8px; text-align:right; border-bottom:1px solid var(--border-soft); color:var(--text-dim); cursor:pointer; }
+table.chain th.strike{ text-align:center; color:var(--amber); }
+table.chain td.strike{ text-align:center; color:var(--amber); font-weight:700; background:rgba(255,176,32,0.05); }
+table.chain td.itm-call{ background:rgba(61,220,132,0.06); }
+table.chain td.itm-put{ background:rgba(255,92,92,0.06); }
+table.chain td.ltp{ color:var(--text); font-weight:600; }
+table.chain td.up{ color:var(--green); }
+table.chain td.down{ color:var(--red); }
+table.chain tr.atm td{ border-top:1px solid var(--amber-dim); border-bottom:1px solid var(--amber-dim); }
+table.chain tr.selected td{ background:rgba(255,176,32,0.14); }
+table.chain tr:hover td{ background:rgba(255,176,32,0.08); }
+table.chain td.empty{ text-align:center; padding:18px; cursor:default; color:var(--text-faint); }
+
 .chart-card{ border:1px solid var(--border); border-radius:10px; background:var(--card); }
 .chart-body{ padding:8px 10px 12px; height:220px; }
 .charts-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(340px,1fr)); gap:12px; }
