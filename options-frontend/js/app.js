@@ -280,10 +280,7 @@ function recalcLocal(){
   const mc = monteCarlo(S,K,T,r,sigma,q,30000,optionType);
   const iv = market ? impliedVol(market,S,K,T,r,q,optionType) : NaN;
 
-  fillResultCards(bs, {
-    callDelta:gk.callDelta, putDelta:gk.putDelta, gamma:gk.gamma, vega:gk.vega,
-    callTheta:gk.callTheta, putTheta:gk.putTheta, callRho:gk.callRho, putRho:gk.putRho
-  }, { european:crrEuro, american:crrAmerican, earlyExercisePremium:crrAmerican-crrEuro },
+  fillResultCards(bs, gk, { european:crrEuro, american:crrAmerican, earlyExercisePremium:crrAmerican-crrEuro },
      { price:mc.price, stdError:mc.se }, { solved:isNaN(iv)?null:iv, nseReported:null }, sigma, optionType);
 
   const fairValue = isCall ? bs.call : bs.put;
@@ -335,6 +332,9 @@ function fillResultCards(bs, gk, crr, mc, iv, sigmaUsed, type){
     ['Vega (per 1% IV)', gk.vega/100, 4],
     ['Theta (per day)', (isCall? gk.callTheta : gk.putTheta)/365, 4],
     ['Rho (per 1% rate)', (isCall? gk.callRho : gk.putRho)/100, 4],
+    ['Vanna (Δ per 1% IV)', gk.vanna/100, 5],
+    ['Vomma (vega per 1% IV)', gk.vomma/10000, 5],
+    ['Charm (Δ change per day)', (isCall? gk.callCharm : gk.putCharm)/365, 5],
   ];
   document.getElementById('greeksTable').querySelector('tbody').innerHTML =
     rows.map(r=>`<tr><td>${r[0]}</td><td>${fmtN(r[1],r[2])}</td></tr>`).join('');

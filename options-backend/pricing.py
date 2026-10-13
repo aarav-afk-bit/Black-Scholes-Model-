@@ -34,7 +34,11 @@ def black_scholes(S, K, T, r, sigma, q=0.0):
 
 
 def greeks(S, K, T, r, sigma, q=0.0):
-    """Delta, Gamma, Vega, Theta, Rho for both call and put."""
+    """
+    Delta, Gamma, Vega, Theta, Rho for both call and put, plus the
+    second-order Greeks Vanna (dDelta/dVol), Vomma (dVega/dVol) and Charm
+    (delta drift per year as time passes). All per unit, per year.
+    """
     d1 = (np.log(S / K) + (r - q + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     pdf_d1 = norm.pdf(d1)
@@ -58,6 +62,14 @@ def greeks(S, K, T, r, sigma, q=0.0):
     call_rho = K * T * np.exp(-r * T) * norm.cdf(d2)
     put_rho = -K * T * np.exp(-r * T) * norm.cdf(-d2)
 
+    vanna = -np.exp(-q * T) * pdf_d1 * d2 / sigma
+    vomma = vega * d1 * d2 / sigma
+    charm_common = np.exp(-q * T) * pdf_d1 * (2 * (r - q) * T - d2 * sigma * np.sqrt(T)) / (
+        2 * T * sigma * np.sqrt(T)
+    )
+    call_charm = q * np.exp(-q * T) * norm.cdf(d1) - charm_common
+    put_charm = -q * np.exp(-q * T) * norm.cdf(-d1) - charm_common
+
     return {
         "callDelta": float(call_delta),
         "putDelta": float(put_delta),
@@ -67,6 +79,10 @@ def greeks(S, K, T, r, sigma, q=0.0):
         "putTheta": float(put_theta),
         "callRho": float(call_rho),
         "putRho": float(put_rho),
+        "vanna": float(vanna),
+        "vomma": float(vomma),
+        "callCharm": float(call_charm),
+        "putCharm": float(put_charm),
     }
 
 

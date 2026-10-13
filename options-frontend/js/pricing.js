@@ -33,7 +33,12 @@ function bsGreeks(S,K,T,r,sigma,q){
   const putTheta  = -(S*Math.exp(-q*T)*pdfD1*sigma/(2*Math.sqrt(T))) + r*K*Math.exp(-r*T)*normCDF(-d2) - q*S*Math.exp(-q*T)*normCDF(-d1);
   const callRho = K*T*Math.exp(-r*T)*normCDF(d2);
   const putRho  = -K*T*Math.exp(-r*T)*normCDF(-d2);
-  return {callDelta,putDelta,gamma,vega,callTheta,putTheta,callRho,putRho};
+  const vanna = -Math.exp(-q*T)*pdfD1*d2/sigma;
+  const vomma = vega*d1*d2/sigma;
+  const charmCommon = Math.exp(-q*T)*pdfD1*(2*(r-q)*T - d2*sigma*Math.sqrt(T))/(2*T*sigma*Math.sqrt(T));
+  const callCharm = q*Math.exp(-q*T)*normCDF(d1) - charmCommon;
+  const putCharm  = -q*Math.exp(-q*T)*normCDF(-d1) - charmCommon;
+  return {callDelta,putDelta,gamma,vega,callTheta,putTheta,callRho,putRho,vanna,vomma,callCharm,putCharm};
 }
 
 function crrPrice(S,K,T,r,sigma,q,steps,type,american){
