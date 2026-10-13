@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: options-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: options-backend/.python-version
+          cache: pip
+          cache-dependency-path: |
+            options-backend/requirements.txt
+            options-backend/requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check frontend scripts
+        run: for f in options-frontend/js/*.js; do node --check "$f"; done
+      - name: Validate JSON data files
+        run: for f in options-frontend/data/*.json options-backend/data/*.json; do node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))"; done
