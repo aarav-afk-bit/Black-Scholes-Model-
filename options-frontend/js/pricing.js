@@ -155,3 +155,32 @@ function buildSuggestionLocal(K, type, fairValue, marketPrice, gk){
   }
   return Object.assign(base, { verdict, headline, marketPrice, mispricingPct: diffPct*100, suggestedEntry: entry, reasoning });
 }
+
+/* Probability of the underlying finishing above `level` at expiry under the
+   risk-neutral (Black-Scholes) measure: N(d2) evaluated with K = level. */
+function probAbove(S,level,T,r,sigma,q){
+  if(level<=0) return 1;
+  const d2 = (Math.log(S/level) + (r-q-0.5*sigma*sigma)*T) / (sigma*Math.sqrt(T));
+  return normCDF(d2);
+}
+
+/* Probability read-outs for a long option bought at `premium`. */
+function probabilityMetrics(S,K,T,r,sigma,q,type,premium){
+  const isCall = type==='call';
+  const pAboveK = probAbove(S,K,T,r,sigma,q);
+  const breakeven = isCall ? K+premium : K-premium;
+  const pAboveBE = probAbove(S,breakeven,T,r,sigma,q);
+  const pITM = isCall ? pAboveK : 1-pAboveK;
+  const sdMove = sigma*Math.sqrt(T);
+  return {
+    pITM,
+    pProfit: isCall ? pAboveBE : (breakeven>0 ? 1-pAboveBE : 0),
+    // Reflection-principle approximation: P(touch) ~ 2 x P(finish beyond K), capped at 1.
+    pTouch: (isCall ? S>=K : S<=K) ? 1 : Math.min(1, 2*pITM),
+    breakeven,
+    breakevenMovePct: (breakeven-S)/S,
+    expectedMove: S*sdMove,
+    rangeLow: S*Math.exp(-sdMove),
+    rangeHigh: S*Math.exp(sdMove)
+  };
+}
