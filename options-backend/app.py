@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from liquidity import liquidity_summary
 from nse_client import nse_client, INDEX_SYMBOLS
 from pricing import (
     black_scholes,
@@ -217,6 +218,9 @@ def analyze(symbol):
     crr_amer = crr_price(spot, strike, T, r, sigma, q, 150, option_type, american=True)
     mc_price, mc_se = monte_carlo(spot, strike, T, r, sigma, q, 30000, option_type)
     solved_iv = implied_volatility(market_price, spot, strike, T, r, q, option_type)
+    liquidity = liquidity_summary(leg, bs["call"] if option_type == "call" else bs["put"])
+    # IV from the bid/ask mid is often more trustworthy than from a stale LTP.
+    mid_iv = implied_volatility(liquidity["mid"], spot, strike, T, r, q, option_type)
 
     fair_value = bs["call"] if option_type == "call" else bs["put"]
     suggestion = build_suggestion(strike, option_type, fair_value, market_price, gk)
@@ -237,6 +241,7 @@ def analyze(symbol):
             "bid": leg.get("bidprice"),
             "ask": leg.get("askPrice"),
         },
+        "liquidity": liquidity,
         "blackScholes": bs,
         "greeks": gk,
         "crr": {
@@ -245,7 +250,11 @@ def analyze(symbol):
             "earlyExercisePremium": crr_amer - crr_euro,
         },
         "monteCarlo": {"price": mc_price, "stdError": mc_se},
-        "impliedVolatility": {"solved": solved_iv, "nseReported": (nse_iv / 100) if nse_iv else None},
+        "impliedVolatility": {
+            "solved": solved_iv,
+            "solvedFromMid": mid_iv,
+            "nseReported": (nse_iv / 100) if nse_iv else None,
+        },
         "suggestion": suggestion,
         "fetchedAt": datetime.now(timezone.utc).isoformat(),
     })

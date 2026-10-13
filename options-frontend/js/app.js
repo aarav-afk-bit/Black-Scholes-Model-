@@ -232,6 +232,7 @@ function applyAnalysis(data){
   document.getElementById('liveVol').textContent = data.market.volume!=null ? data.market.volume.toLocaleString('en-IN') : 'n/a';
   document.getElementById('liveBidAsk').textContent = (data.market.bid!=null && data.market.ask!=null) ? `${data.market.bid} / ${data.market.ask}` : 'n/a';
   document.getElementById('liveFetchedAt').textContent = new Date(data.fetchedAt).toLocaleTimeString('en-IN');
+  renderLiquidity(data.liquidity, data.impliedVolatility.solvedFromMid);
 
   document.getElementById('ctExpiry').textContent = data.expiry;
   document.getElementById('ctDays').textContent = data.daysToExpiry;
@@ -256,6 +257,23 @@ function applyAnalysis(data){
 
   // Charts (client-side, using the live-derived inputs)
   renderCharts({ S:data.spot, K:data.strike, r:data.inputs.r, sigma:data.inputs.sigma, q:data.inputs.q }, data.daysToExpiry/365, data.optionType==='call');
+}
+
+const LIQUIDITY_LABELS = {
+  GOOD:['GOOD','pos'], FAIR:['FAIR',''], POOR:['POOR','neg'], ILLIQUID:['ILLIQUID','neg'], NO_QUOTES:['NO QUOTES','neg']
+};
+function renderLiquidity(liq, midIV){
+  if(!liq) return;
+  document.getElementById('liveSpread').textContent = liq.mid!=null
+    ? `${fmt(liq.mid)} / ${fmt(liq.spread)} (${liq.spreadPct.toFixed(1)}%)` : 'n/a';
+  const [label, cls] = LIQUIDITY_LABELS[liq.rating] || [liq.rating, ''];
+  const el = document.getElementById('liveLiquidity');
+  el.textContent = label;
+  el.className = 'v ' + cls;
+  el.title = liq.note || '';
+  const chg = liq.changeInOpenInterest;
+  document.getElementById('liveOIChange').textContent = chg!=null ? (chg>0?'+':'') + chg.toLocaleString('en-IN') : 'n/a';
+  document.getElementById('liveMidIV').textContent = midIV!=null ? fmtPct(midIV) : 'n/a';
 }
 
 /* ============================================================
