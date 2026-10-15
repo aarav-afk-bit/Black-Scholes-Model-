@@ -69,26 +69,24 @@ function crrPrice(S,K,T,r,sigma,q,steps,type,american){
   return values[0];
 }
 
+/* Antithetic variates, mirroring pricing.py: each draw z is paired with -z
+   and the two payoffs averaged; the standard error is taken over pairs. */
 function monteCarlo(S,K,T,r,sigma,q,sims,type){
-  let sum=0, sumSq=0;
+  const pairs = Math.max(Math.floor(sims/2), 1);
   const drift = (r-q-0.5*sigma*sigma)*T;
   const diff = sigma*Math.sqrt(T);
-  for(let i=0;i<sims;i+=2){
-    const u1=Math.random(), u2=Math.random();
-    const mag = Math.sqrt(-2*Math.log(u1));
-    const z0 = mag*Math.cos(2*Math.PI*u2);
-    const z1 = mag*Math.sin(2*Math.PI*u2);
-    for(const z of [z0,z1]){
-      const ST = S*Math.exp(drift + diff*z);
-      const payoff = type==='call' ? Math.max(ST-K,0) : Math.max(K-ST,0);
-      sum += payoff; sumSq += payoff*payoff;
-    }
+  const payoff = (ST)=> type==='call' ? Math.max(ST-K,0) : Math.max(K-ST,0);
+  let sum=0, sumSq=0;
+  for(let i=0;i<pairs;i++){
+    const u1=1-Math.random(), u2=Math.random();   // 1-random() avoids log(0)
+    const z = Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+    const pair = 0.5*(payoff(S*Math.exp(drift + diff*z)) + payoff(S*Math.exp(drift - diff*z)));
+    sum += pair; sumSq += pair*pair;
   }
-  const n = sims % 2 === 0 ? sims : sims+1;
-  const mean = sum/n;
-  const variance = Math.max(sumSq/n - mean*mean, 0);
+  const mean = sum/pairs;
+  const variance = pairs>1 ? Math.max((sumSq - pairs*mean*mean)/(pairs-1), 0) : 0;
   const price = Math.exp(-r*T)*mean;
-  const se = Math.exp(-r*T)*Math.sqrt(variance/n);
+  const se = Math.exp(-r*T)*Math.sqrt(variance/pairs);
   return {price, se};
 }
 
