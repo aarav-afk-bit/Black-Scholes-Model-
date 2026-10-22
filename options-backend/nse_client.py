@@ -54,12 +54,13 @@ INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"}
 
 
 class NSEClient:
-    def __init__(self, cache_ttl_seconds=5, session_ttl_seconds=240):
+    def __init__(self, cache_ttl_seconds=5, session_ttl_seconds=240, max_cache_entries=256):
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
         self._lock = threading.Lock()
         self._last_refresh = 0.0
-        self._cache = {}
+        self._cache = {}  # key -> (stored_at, data); insertion order = least recently used first
+        self.max_cache_entries = max_cache_entries
         self.cache_ttl = cache_ttl_seconds
         self.session_ttl = session_ttl_seconds
         self._refresh_session()
@@ -102,13 +103,27 @@ class NSEClient:
         raise RuntimeError(f"NSE request failed for {url} (last status: {last_status})")
 
     def _cached(self, key, fetch):
+        """
+        Return a fresh cached value for `key`, or call `fetch()` and cache it.
+
+        Every symbol x expiry gets its own entry, so without a bound the cache
+        would grow for as long as the server runs. Expired entries are dropped
+        on each write, and the least recently used ones go once the cache is
+        over `max_cache_entries`.
+        """
         with self._lock:
-            cached = self._cache.get(key)
+            cached = self._cache.pop(key, None)
             if cached and time.time() - cached[0] < self.cache_ttl:
+                self._cache[key] = cached  # re-insert: now the most recently used
                 return cached[1]
         data = fetch()
         with self._lock:
-            self._cache[key] = (time.time(), data)
+            now = time.time()
+            self._cache[key] = (now, data)
+            for stale in [k for k, (stored_at, _) in self._cache.items() if now - stored_at >= self.cache_ttl]:
+                del self._cache[stale]
+            while len(self._cache) > self.max_cache_entries:
+                del self._cache[next(iter(self._cache))]
         return data
 
     def get_expiries(self, symbol):
