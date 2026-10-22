@@ -159,6 +159,12 @@ select.sel{
 .card-head{ padding:9px 13px; border-bottom:1px solid var(--border-soft); display:flex; justify-content:space-between; align-items:center; background:var(--panel2); }
 .card-head h3{ font-family:var(--mono); font-size:10.5px; letter-spacing:0.09em; color:var(--text-dim); text-transform:uppercase; }
 .card-head .tag{ font-size:9px; font-family:var(--mono); color:var(--text-faint); border:1px solid var(--border); padding:1px 6px; border-radius:8px; }
+
+/* ---------- "What does this mean?" tips ---------- */
+.tip-i{ display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; margin-left:5px; border-radius:50%; border:1px solid var(--text-faint); color:var(--text-faint); font:italic 700 8.5px/1 Georgia, serif; text-transform:none; letter-spacing:0; vertical-align:1px; cursor:help; opacity:0.75; transition:opacity .15s, color .15s, border-color .15s; }
+.tip-i:hover, .tip-i:focus-visible{ opacity:1; color:var(--amber); border-color:var(--amber); outline:none; }
+.tip-box{ position:fixed; z-index:100; max-width:280px; padding:8px 11px; border-radius:8px; background:#1c1d16; border:1px solid var(--amber-dim); color:var(--text); font-family:var(--sans); font-size:11.5px; line-height:1.5; letter-spacing:0; text-transform:none; box-shadow:0 10px 28px rgba(0,0,0,0.55); pointer-events:none; opacity:0; transform:translateY(3px); transition:opacity .12s, transform .12s; }
+.tip-box.show{ opacity:1; transform:none; }
 .card-body{ padding:12px 13px; }
 
 .big-two{ display:flex; gap:10px; }
