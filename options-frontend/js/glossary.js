@@ -131,10 +131,11 @@ function labelKey(el){
 
 function applyTips(root=document){
   root.querySelectorAll(TIP_SELECTORS).forEach(el=>{
-    if(el.dataset.tipped) return;
+    // Check for the icon itself rather than a flag: some labels (e.g. the
+    // suggestion price label) are rewritten with textContent, which drops it.
+    if(el.querySelector(':scope > .tip-i')) return;
     const tip = GLOSSARY[labelKey(el)];
     if(!tip) return;
-    el.dataset.tipped = '1';
     const i = document.createElement('span');
     i.className = 'tip-i';
     i.tabIndex = 0;
