@@ -340,6 +340,8 @@ function applyAnalysis(data){
   renderCharts({ S:data.spot, K:data.strike, r:data.inputs.r, sigma:data.inputs.sigma, q:data.inputs.q }, data.daysToExpiry/365, data.optionType==='call');
   renderScenarios({ S:data.spot, K:data.strike, r:data.inputs.r, sigma:data.inputs.sigma, q:data.inputs.q }, data.daysToExpiry,
     data.optionType, data.market.lastPrice || (data.optionType==='call' ? data.blackScholes.call : data.blackScholes.put));
+  renderSummary({ S:data.spot, K:data.strike, r:data.inputs.r, sigma:data.inputs.sigma, q:data.inputs.q },
+    data.daysToExpiry, data.optionType, data.market.lastPrice, data.expiry);
 }
 
 const LIQUIDITY_LABELS = {
@@ -404,6 +406,7 @@ function recalcLocal(){
 
   renderCharts({S,K,r,sigma,q}, T, isCall);
   renderScenarios({S,K,r,sigma,q}, days, optionType, market || fairValue);
+  renderSummary({S,K,r,sigma,q}, days, optionType, market, document.getElementById('expirySelect').value);
   setStatus('LOCAL RECALC — no backend call', 'ok');
 }
 
@@ -540,6 +543,63 @@ function renderSuggestionFromServer(sug, optionType){
     OVERPRICED:'Premium is well above model fair value.',
     MODEL_FAIR_VALUE:'No live premium entered yet.'
   }[sug.verdict] || '';
+}
+
+/* ============================================================
+   PLAIN-ENGLISH SUMMARY (what the numbers mean for this trade)
+============================================================ */
+const fmt0 = (v)=> '₹'+Math.round(v).toLocaleString('en-IN');
+
+function renderSummary(p, days, type, marketPrice, expiry){
+  const {S,K,r,sigma,q} = p;
+  const T = days/365, isCall = type==='call', side = isCall ? 'CALL' : 'PUT';
+  const symbol = currentSymbol || 'the underlying';
+  const ref = companiesRef.find(c=>c.symbol===currentSymbol);
+  const lot = ref && ref.lotSize ? ref.lotSize : null;
+  const bs = blackScholes(S,K,T,r,sigma,q), gk = bsGreeks(S,K,T,r,sigma,q);
+  const fair = isCall ? bs.call : bs.put;
+  const premium = marketPrice || fair;
+  const m = probabilityMetrics(S,K,T,r,sigma,q,type,premium);
+  const delta = isCall ? gk.callDelta : gk.putDelta;
+  const thetaDay = (isCall ? gk.callTheta : gk.putTheta)/365;
+  const perLot = (v)=> lot ? ` (${fmt0(Math.abs(v)*lot)} per lot of ${lot})` : '';
+  const items = [];
+
+  document.getElementById('summaryTitle').textContent =
+    `${symbol} ${K.toLocaleString('en-IN')} ${side}${expiry ? ' · expires '+expiry : ''} · ${days} day${days===1?'':'s'} left`;
+
+  items.push(['₹', `You'd pay <strong>${fmt(premium)}</strong> per unit${perLot(premium)}. ` +
+    `That's also the <strong>most you can lose</strong> if you buy it.` + (marketPrice ? '' : ' (No live price — using the model value.)')]);
+
+  if(marketPrice && fair > 1e-8){
+    const diff = (marketPrice - fair)/fair;
+    const cheap = diff < 0;
+    items.push(['⚖', `The model values it at <strong>${fmt(fair)}</strong>, so the market price is ` +
+      `<span class="${Math.abs(diff)<0.02 ? '' : cheap ? 'good' : 'bad'}"><strong>${(Math.abs(diff)*100).toFixed(1)}% ${cheap ? 'cheaper' : 'dearer'}</strong></span> than the model` +
+      (Math.abs(diff)<0.02 ? ' — basically fair.' : cheap ? ' — a possible bargain.' : ' — you would be overpaying.')]);
+  } else {
+    items.push(['⚖', `The model values it at <strong>${fmt(fair)}</strong>.`]);
+  }
+
+  const dir = isCall ? 'above' : 'below';
+  const movePct = Math.abs(m.breakevenMovePct*100).toFixed(1);
+  const alreadyThere = isCall ? S >= m.breakeven : S <= m.breakeven;
+  items.push(['🎯', `To make money at expiry, ${symbol} must finish <strong>${dir} ${fmt(m.breakeven)}</strong> ` +
+    (alreadyThere ? `— it's already there today. ` : `— a ${movePct}% move ${isCall ? 'up' : 'down'} from ${fmt(S)}. `) +
+    `The model gives that about a <strong>${Math.round(m.pProfit*100)}% chance</strong>.`]);
+
+  items.push(['↕', `If ${symbol} moves <strong>₹100</strong>${isCall ? ' up' : ' down'}, this option gains about <strong>${fmt(Math.abs(delta)*100)}</strong>` +
+    `${perLot(delta*100)}. Prices usually swing about <strong>±${fmt0(m.expectedMove)}</strong> by expiry.`]);
+
+  items.push(['⏳', `Time costs money: with nothing else changing, it loses about <strong>${fmt(Math.abs(thetaDay))} a day</strong>${perLot(thetaDay)}` +
+    `, and the loss speeds up as expiry gets closer.`]);
+
+  items.push(['σ', `It's priced at <strong>${(sigma*100).toFixed(1)}% volatility</strong>. If that rises 1 point, it gains about ` +
+    `<strong>${fmt(gk.vega/100)}</strong>${perLot(gk.vega/100)}; if it falls, it loses the same.`]);
+
+  document.getElementById('summaryList').innerHTML =
+    items.map(([ico, html])=>`<li><span class="ico">${ico}</span><span>${html}</span></li>`).join('');
+  document.getElementById('summaryCard').hidden = false;
 }
 
 /* ============================================================
