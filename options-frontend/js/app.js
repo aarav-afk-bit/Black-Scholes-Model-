@@ -276,7 +276,7 @@ async function fetchLiveAndAnalyze(){
   if(!currentSymbol){ showError('Search and select a symbol first.'); return; }
   const expiry = document.getElementById('expirySelect').value;
   const strike = document.getElementById('strikeSelect').value;
-  if(!expiry || !strike){ showError('Pick an expiry and strike first.'); return; }
+  if(!expiry || !strike || document.getElementById('strikeSelect').disabled){ showError('Pick an expiry and strike first.'); return; }
 
   // Backend units: r as a decimal, q as a percentage (it divides q by 100 itself).
   const ratePct = parseFloat(document.getElementById('pRate').value);
@@ -286,6 +286,10 @@ async function fetchLiveAndAnalyze(){
   if(!isNaN(divPct)) params.q = divPct;
 
   setStatus('RUNNING LIVE ANALYSIS…', 'pending');
+  const btn = document.getElementById('fetchBtn');
+  btn.classList.add('loading');
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  btn.textContent = 'FETCHING…';
   try{
     const data = await Api.analyze(currentSymbol, params);
     applyAnalysis(data);
@@ -293,6 +297,9 @@ async function fetchLiveAndAnalyze(){
   }catch(err){
     setStatus('ANALYSIS FAILED', 'error');
     showError(`Live analysis failed: ${err.message}`);
+  }finally{
+    btn.classList.remove('loading');
+    btn.textContent = btn.dataset.label;
   }
 }
 
@@ -419,10 +426,34 @@ function normalizeLocalSuggestion(sug){
 }
 
 /* ============================================================
+   UI STATE: waiting for first run / inputs changed since last run
+============================================================ */
+document.body.classList.add('awaiting');
+
+function markResultsFresh(){
+  document.body.classList.remove('awaiting');
+  const recalc = document.getElementById('recalcBtn');
+  recalc.classList.remove('attention');
+  recalc.title = '';
+}
+
+// Editing any input after a run means the results are stale until Recalc.
+document.querySelector('.params-strip').addEventListener('input', ()=>{
+  if(document.body.classList.contains('awaiting')) return;
+  const recalc = document.getElementById('recalcBtn');
+  recalc.classList.add('attention');
+  recalc.title = 'Inputs changed — press to update the results';
+});
+document.querySelector('.params-strip').addEventListener('keydown', (e)=>{
+  if(e.key==='Enter' && e.target.matches('input')) recalcLocal();
+});
+
+/* ============================================================
    RENDER: result cards (shared by live + local paths)
 ============================================================ */
 function fillResultCards(bs, gk, crr, mc, iv, sigmaUsed, type){
   const isCall = type==='call';
+  markResultsFresh();
 
   document.getElementById('bsCall').textContent = fmt(bs.call);
   document.getElementById('bsPut').textContent = fmt(bs.put);
