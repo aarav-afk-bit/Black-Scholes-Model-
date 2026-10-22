@@ -17,6 +17,7 @@ const fmtPct = (v,dec=2)=> (v===null||v===undefined||isNaN(v)) ? '—' : (v*100)
 ============================================================ */
 function setStatus(text, mode='ok'){
   document.getElementById('statusText').textContent = text;
+  updateGuide(text);
   const dot = document.getElementById('statusDot');
   dot.className = 'status-dot' + (mode==='error' ? ' err' : mode==='pending' ? ' pending' : '');
 }
@@ -65,13 +66,94 @@ function renderDropdown(list){
   });
 }
 
+// Best matches first: exact symbol, then symbol prefix, then symbol/name contains.
+function searchRank(c, q){
+  const sym = c.symbol.toLowerCase(), name = c.name.toLowerCase();
+  if(sym===q) return 0;
+  if(sym.startsWith(q)) return 1;
+  if(name.startsWith(q)) return 2;
+  if(sym.includes(q)) return 3;
+  return name.includes(q) ? 4 : -1;
+}
+
 searchInput.addEventListener('input', ()=>{
   const q = searchInput.value.trim().toLowerCase();
   if(!q){ dropdown.classList.remove('open'); return; }
-  const list = companiesRef.filter(c=> c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
+  const list = companiesRef
+    .map(c=>({c, rank:searchRank(c, q)}))
+    .filter(x=>x.rank>=0)
+    .sort((a,b)=> a.rank-b.rank || a.c.symbol.localeCompare(b.c.symbol))
+    .map(x=>x.c);
   renderDropdown(list);
+  if(list.length) dropdown.querySelector('.dropdown-item').classList.add('active');
 });
 document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-wrap')) dropdown.classList.remove('open'); });
+
+// Keyboard: arrows move through results, Enter picks, Escape closes.
+searchInput.addEventListener('keydown', (e)=>{
+  const items = [...dropdown.querySelectorAll('.dropdown-item')];
+  if(!dropdown.classList.contains('open') || !items.length) return;
+  let idx = items.findIndex(el=>el.classList.contains('active'));
+  if(e.key==='ArrowDown' || e.key==='ArrowUp'){
+    e.preventDefault();
+    idx = e.key==='ArrowDown' ? Math.min(idx+1, items.length-1) : Math.max(idx-1, 0);
+    items.forEach((el,i)=>el.classList.toggle('active', i===idx));
+    items[idx].scrollIntoView({block:'nearest'});
+  } else if(e.key==='Enter'){
+    e.preventDefault();
+    (items[idx] || items[0]).click();
+    searchInput.blur();
+  } else if(e.key==='Escape'){
+    dropdown.classList.remove('open');
+  }
+});
+
+// Press "/" anywhere (outside a text field) to jump to search.
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='/' && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)){
+    e.preventDefault();
+    searchInput.focus();
+  }
+});
+
+/* ============================================================
+   GETTING-STARTED GUIDE (3 steps that tick off as you go)
+============================================================ */
+const QUICK_PICKS = ['NIFTY','BANKNIFTY','RELIANCE','HDFCBANK','INFY','TCS'];
+
+function renderQuickPicks(){
+  const known = new Set(companiesRef.map(c=>c.symbol));
+  const box = document.getElementById('quickPicks');
+  box.innerHTML = QUICK_PICKS.filter(s=>known.has(s))
+    .map(s=>`<button class="chip" data-symbol="${s}">${s}</button>`).join('');
+  box.querySelectorAll('.chip').forEach(b=> b.addEventListener('click', ()=> selectSymbol(b.dataset.symbol)));
+}
+
+function updateGuide(statusText){
+  const done = {
+    1: !!currentSymbol,
+    2: !!currentChain && !document.getElementById('strikeSelect').disabled,
+    3: /^(LIVE —|LOCAL RECALC)/.test(statusText||''),
+  };
+  const firstOpen = [1,2,3].find(n=>!done[n]);
+  document.querySelectorAll('.guide-steps li').forEach(li=>{
+    const n = Number(li.dataset.step);
+    li.classList.toggle('done', done[n]);
+    li.classList.toggle('active', n===firstOpen);
+  });
+  const count = [1,2,3].filter(n=>done[n]).length;
+  document.getElementById('guideProgress').textContent = count===3 ? 'all done — edit numbers below for what-ifs' : `${count} of 3 done`;
+}
+
+function setGuideCollapsed(collapsed){
+  document.getElementById('guide').classList.toggle('collapsed', collapsed);
+  document.getElementById('guideToggle').setAttribute('aria-expanded', String(!collapsed));
+  try{ localStorage.setItem('guideCollapsed', collapsed ? '1' : '0'); }catch(e){}
+}
+document.getElementById('guideToggle').addEventListener('click', ()=>{
+  setGuideCollapsed(!document.getElementById('guide').classList.contains('collapsed'));
+});
+try{ if(localStorage.getItem('guideCollapsed')==='1') setGuideCollapsed(true); }catch(e){}
 
 /* ============================================================
    SYMBOL SELECT -> LOAD LIVE OPTION CHAIN (strikes / expiries)
@@ -748,6 +830,7 @@ function renderSmile(expiry){
 ============================================================ */
 (async function init(){
   await loadCompanies();
+  renderQuickPicks();
   // Free Render instances sleep when idle and take ~30-60s to wake, so the
   // first health check often fails. Keep retrying for a while before giving up.
   setStatus('CONNECTING TO BACKEND…', 'pending');

@@ -42,7 +42,26 @@
 </header>
 
 <div class="banner error" id="errorBanner"></div>
-<div class="banner info show" id="infoBanner">Live data comes from NSE's public option-chain API via the backend. Search a symbol, pick an expiry &amp; strike, then hit "Fetch Live" — no manual price entry needed. You can still edit any field below and hit "Recalc Local" for what-if scenarios.</div>
+<section class="guide" id="guide" aria-label="How to use">
+  <button class="guide-toggle" id="guideToggle" aria-expanded="true">
+    <span>How it works</span><span class="guide-progress" id="guideProgress">0 of 3 done</span><span class="chev">▾</span>
+  </button>
+  <ol class="guide-steps">
+    <li data-step="1">
+      <span class="num">1</span>
+      <div><b>Pick a stock or index</b><span class="hint">Type in the search box (press <kbd>/</kbd> to jump there), or tap one:</span>
+        <div class="chips" id="quickPicks"></div></div>
+    </li>
+    <li data-step="2">
+      <span class="num">2</span>
+      <div><b>Choose expiry, strike and CALL / PUT</b><span class="hint">Use the dropdowns at the top, or click any row in the Option Chain table further down.</span></div>
+    </li>
+    <li data-step="3">
+      <span class="num">3</span>
+      <div><b>Press Fetch Live</b><span class="hint">Pulls the real NSE premium and runs every model. Then edit any number in the strip below and press Recalc Local to try "what if".</span></div>
+    </li>
+  </ol>
+</section>
 
 <div class="params-strip">
   <div class="param">
