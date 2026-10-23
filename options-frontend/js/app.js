@@ -762,52 +762,154 @@ function renderScenarios(p, days, type, premium){
 /* ============================================================
    CHARTS
 ============================================================ */
+const CHART_FONT = { family:'JetBrains Mono', size:9.5 };
+const TICK = { color:'#5c5d54', font:CHART_FONT };
+const GRID = { color:'#1d1e18' };
+
+// Compact rupee ticks: ₹950, ₹24.5k, ₹1.2L.
+function inrTick(v){
+  const a = Math.abs(v), sign = v<0 ? '−' : '';
+  if(a>=1e5) return sign+'₹'+(a/1e5).toFixed(a>=1e6?0:1)+'L';
+  if(a>=1e3) return sign+'₹'+(a/1e3).toFixed(a>=1e4?1:2).replace(/\.?0+$/,'')+'k';
+  return sign+'₹'+a.toFixed(a<10?1:0);
+}
+const inrFull = (v)=> '₹'+Number(v).toLocaleString('en-IN',{minimumFractionDigits:2, maximumFractionDigits:2});
+
+function axisTitle(text){ return { display:true, text, color:'#7d7e72', font:{ family:'JetBrains Mono', size:9.5 } }; }
+
 function baseChartOptions(extra={}){
   return Object.assign({
     responsive:true, maintainAspectRatio:false,
     interaction:{ mode:'index', intersect:false },
     plugins:{
       legend:{ labels:{ color:'#9b9c8f', font:{ family:'JetBrains Mono', size:10 }, boxWidth:12 } },
-      tooltip:{ backgroundColor:'#16170f', borderColor:'#282a22', borderWidth:1, titleColor:'#ffb020', bodyColor:'#eae7dc', titleFont:{family:'JetBrains Mono'}, bodyFont:{family:'JetBrains Mono', size:11} }
+      tooltip:{
+        backgroundColor:'#16170f', borderColor:'#282a22', borderWidth:1, titleColor:'#ffb020', bodyColor:'#eae7dc',
+        titleFont:{family:'JetBrains Mono'}, bodyFont:{family:'JetBrains Mono', size:11},
+        callbacks:{
+          // Datasets can set `fmt` to format their values; rupees with 2 decimals otherwise.
+          label:(ctx)=> `${ctx.dataset.label}: ${(ctx.dataset.fmt || inrFull)(ctx.parsed.y)}`
+        }
+      }
     },
     scales:{
-      x:{ ticks:{ color:'#5c5d54', font:{ family:'JetBrains Mono', size:9.5 } }, grid:{ color:'#1d1e18' } },
-      y:{ ticks:{ color:'#5c5d54', font:{ family:'JetBrains Mono', size:9.5 } }, grid:{ color:'#1d1e18' } }
+      x:{ ticks:{ ...TICK, maxRotation:0, autoSkip:true, maxTicksLimit:7 }, grid:GRID },
+      y:{ ticks:{ ...TICK, callback:inrTick }, grid:GRID }
     }
   }, extra);
 }
+
+/* Dashed vertical guide lines (spot, strike, breakeven...). Set per chart via
+   options.plugins.markers.lines = [{x, label, color}]; x is in data units
+   (or a category index on category axes). */
+const markerPlugin = {
+  id:'markers',
+  afterDatasetsDraw(chart, args, opts){
+    const lines = (opts && opts.lines) || [];
+    const {ctx, chartArea:{top, bottom, left, right}, scales:{x}} = chart;
+    ctx.save();
+    ctx.font = '600 9px JetBrains Mono, monospace';
+    const rowEnds = [];   // right edge of the last label in each text row
+    lines
+      .map(m=>({ ...m, px:x.getPixelForValue(m.x) }))
+      .filter(m=> isFinite(m.px) && m.px>=left && m.px<=right)
+      .sort((a,b)=> a.px-b.px)
+      .forEach(m=>{
+        ctx.strokeStyle = m.color; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+        ctx.beginPath(); ctx.moveTo(m.px, top); ctx.lineTo(m.px, bottom); ctx.stroke();
+        ctx.setLineDash([]);
+        const w = ctx.measureText(m.label).width;
+        const tx = Math.min(Math.max(m.px - w/2, left), right - w);
+        // Drop to the next row if this label would collide with one already drawn.
+        let row = rowEnds.findIndex(end=> tx > end + 4);
+        if(row === -1){ row = rowEnds.length; rowEnds.push(0); }
+        rowEnds[row] = tx + w;
+        ctx.fillStyle = m.color;
+        ctx.fillText(m.label, tx, top + 10 + row*11);
+      });
+    ctx.restore();
+  }
+};
+if(window.Chart) Chart.register(markerPlugin);
+
+// Plugins block for one chart: the shared tooltip plus an optional title
+// formatter and marker lines.
+function chartPlugins({ title, label, markers=[], legend }={}){
+  const base = baseChartOptions().plugins;
+  return {
+    ...base,
+    ...(legend ? { legend } : {}),
+    tooltip:{ ...base.tooltip, callbacks:{ ...base.tooltip.callbacks, ...(title ? {title} : {}), ...(label ? {label} : {}) } },
+    markers:{ lines:markers }
+  };
+}
+
 function makeLineChart(ctxId, labels, datasets, extraOpts={}){
   if(charts[ctxId]) charts[ctxId].destroy();
   const ctx = document.getElementById(ctxId).getContext('2d');
   charts[ctxId] = new Chart(ctx, { type:'line', data:{ labels, datasets }, options: baseChartOptions(extraOpts) });
 }
 
+// Spot-axis charts: zoom to where the action is (about ±3 standard deviations
+// of the move to expiry, at least ±5%, at most ±50%) instead of a fixed ±50%.
+// The window is snapped to a round tick step (e.g. 1,000 or 2,500) so the
+// axis reads 21,000 · 23,000 · 25,000 rather than 20,326 · 24,000 · 28,699.
+function spotWindow(S, sigma, T){
+  const half = Math.min(Math.max(3*sigma*Math.sqrt(T), 0.05), 0.5);
+  const raw = S*2*half/5;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m=>m*mag).find(st=>st>=raw);
+  return [Math.floor(S*(1-half)/step)*step, Math.ceil(S*(1+half)/step)*step, step];
+}
+function spotAxis(range, title='Price of underlying'){
+  return { type:'linear', min:range[0], max:range[1],
+    ticks:{ ...TICK, maxRotation:0, stepSize:range[2], callback:(v)=>Math.round(v).toLocaleString('en-IN') },
+    grid:GRID, title:axisTitle(title) };
+}
+const spotTooltipTitle = (items)=> items.length ? 'Spot '+inrFull(items[0].parsed.x) : '';
+
 function renderCharts(p, T, isCall){
   const {S,K,r,sigma,q} = p;
+  const side = isCall ? 'Call' : 'Put';
+  const bsNow = blackScholes(S,K,T,r,sigma,q);
+  const premium = parseFloat(document.getElementById('pMarket').value) || (isCall ? bsNow.call : bsNow.put);
+  const breakeven = isCall ? K + premium : K - premium;
+  const win = spotWindow(S, sigma, T), [lo, hi] = win;
+  const xs = Array.from({length:81}, (_,i)=> lo + (hi-lo)*i/80);
+  const markSpot = { x:S, label:'Spot', color:'#7fd4ff' };
+  const markStrike = { x:K, label:'Strike', color:'#ffb020' };
+  const spotScales = (yTitle)=>({ x:spotAxis(win), y:{ ticks:{ ...TICK, callback:inrTick }, grid:GRID, title:axisTitle(yTitle) } });
 
-  const spotRange=[], callPayoff=[], putPayoff=[];
-  for(let i=0;i<=60;i++){ const s=S*0.5+(S*1.5-S*0.5)*i/60; spotRange.push(s.toFixed(0)); callPayoff.push(Math.max(s-K,0)); putPayoff.push(Math.max(K-s,0)); }
-  makeLineChart('chartPayoff', spotRange, [
-    { label:'Call Payoff', data:callPayoff, borderColor:'#3ddc84', backgroundColor:'rgba(61,220,132,0.08)', fill:true, pointRadius:0, borderWidth:2 },
-    { label:'Put Payoff', data:putPayoff, borderColor:'#ff5c5c', backgroundColor:'rgba(255,92,92,0.06)', fill:true, pointRadius:0, borderWidth:2 }
-  ]);
+  // 1. Payoff: what YOU make or lose at expiry after paying the premium.
+  const pnl = xs.map(s=>({ x:s, y:(isCall ? Math.max(s-K,0) : Math.max(K-s,0)) - premium }));
+  const gross = xs.map(s=>({ x:s, y: isCall ? Math.max(s-K,0) : Math.max(K-s,0) }));
+  makeLineChart('chartPayoff', undefined, [
+    { label:`Your P&L (long ${side.toLowerCase()})`, data:pnl, borderColor:isCall?'#3ddc84':'#ff5c5c', borderWidth:2.5, pointRadius:0,
+      fill:{ target:'origin', above:'rgba(61,220,132,0.12)', below:'rgba(255,92,92,0.12)' } },
+    { label:'Payoff before premium', data:gross, borderColor:'#5c5d54', borderWidth:1, borderDash:[4,3], pointRadius:0 }
+  ], { scales:spotScales('Profit / loss per unit'),
+       plugins:chartPlugins({ title:spotTooltipTitle, markers:[markSpot, markStrike, { x:breakeven, label:'Breakeven', color:'#3ddc84' }] }) });
 
-  const spotLabels=[], callVsSpot=[], putVsSpot=[];
-  for(let i=0;i<=50;i++){ const s=S*0.5+(S*1.5-S*0.5)*i/50; const bs=blackScholes(s,K,T,r,sigma,q); spotLabels.push(s.toFixed(0)); callVsSpot.push(bs.call); putVsSpot.push(bs.put); }
-  makeLineChart('chartVsSpot', spotLabels, [
-    { label:'Call', data:callVsSpot, borderColor:'#3ddc84', pointRadius:0, borderWidth:2, tension:0.15 },
-    { label:'Put', data:putVsSpot, borderColor:'#ff5c5c', pointRadius:0, borderWidth:2, tension:0.15 }
-  ]);
+  // 2. Value today across spot prices.
+  const vsSpot = xs.map(s=>blackScholes(s,K,T,r,sigma,q));
+  makeLineChart('chartVsSpot', undefined, [
+    { label:'Call', data:vsSpot.map((b,i)=>({x:xs[i], y:b.call})), borderColor:'#3ddc84', pointRadius:0, borderWidth:isCall?2.5:1.2, tension:0.15 },
+    { label:'Put', data:vsSpot.map((b,i)=>({x:xs[i], y:b.put})), borderColor:'#ff5c5c', pointRadius:0, borderWidth:isCall?1.2:2.5, tension:0.15 }
+  ], { scales:spotScales('Option price today'),
+       plugins:chartPlugins({ title:spotTooltipTitle, markers:[markSpot, markStrike] }) });
 
-  const volLabels=[], callVsVol=[], putVsVol=[];
-  for(let i=0;i<=50;i++){ const v=0.05+(0.80-0.05)*i/50; const bs=blackScholes(S,K,T,r,v,q); volLabels.push((v*100).toFixed(0)+'%'); callVsVol.push(bs.call); putVsVol.push(bs.put); }
-  makeLineChart('chartVsVol', volLabels, [
-    { label:'Call', data:callVsVol, borderColor:'#3ddc84', pointRadius:0, borderWidth:2, tension:0.15 },
-    { label:'Put', data:putVsVol, borderColor:'#ff5c5c', pointRadius:0, borderWidth:2, tension:0.15 }
-  ]);
+  // 3. Value across volatility levels, with the σ in use marked.
+  const vols = Array.from({length:51}, (_,i)=> 5 + 75*i/50);
+  const vsVol = vols.map(v=>blackScholes(S,K,T,r,v/100,q));
+  makeLineChart('chartVsVol', undefined, [
+    { label:'Call', data:vsVol.map((b,i)=>({x:vols[i], y:b.call})), borderColor:'#3ddc84', pointRadius:0, borderWidth:isCall?2.5:1.2, tension:0.15 },
+    { label:'Put', data:vsVol.map((b,i)=>({x:vols[i], y:b.put})), borderColor:'#ff5c5c', pointRadius:0, borderWidth:isCall?1.2:2.5, tension:0.15 }
+  ], { scales:{ x:{ type:'linear', min:5, max:80, ticks:{ ...TICK, maxRotation:0, callback:(v)=>v+'%' }, grid:GRID, title:axisTitle('Volatility (σ)') },
+                y:{ ticks:{ ...TICK, callback:inrTick }, grid:GRID, title:axisTitle('Option price') } },
+       plugins:chartPlugins({ title:(it)=> it.length ? `σ = ${it[0].parsed.x.toFixed(1)}%` : '', markers:[{ x:sigma*100, label:'σ used', color:'#ffb020' }] }) });
 
-  // Decay from today to the actual expiry (not an arbitrary 2-year span): x is
-  // days remaining, so the curve steepens toward the right as theta accelerates.
+  // 4. Decay from today to the actual expiry: x is days remaining, so the
+  // curve steepens toward the right as theta accelerates.
   const daysLeft = Math.max(Math.round(T*365), 1);
   const steps = Math.min(daysLeft, 60);
   const timeLabels=[], callVsTime=[], putVsTime=[], intrinsic=[];
@@ -819,46 +921,47 @@ function renderCharts(p, T, isCall){
     callVsTime.push(bs.call); putVsTime.push(bs.put); intrinsic.push(intrinsicNow);
   }
   makeLineChart('chartVsTime', timeLabels, [
-    { label:'Call', data:callVsTime, borderColor:'#3ddc84', pointRadius:0, borderWidth:isCall?2.5:1.5, tension:0.15 },
-    { label:'Put', data:putVsTime, borderColor:'#ff5c5c', pointRadius:0, borderWidth:isCall?1.5:2.5, tension:0.15 },
-    { label:`${isCall?'Call':'Put'} intrinsic`, data:intrinsic, borderColor:'#5c5d54', pointRadius:0, borderWidth:1, borderDash:[4,3] }
-  ]);
+    { label:'Call', data:callVsTime, borderColor:'#3ddc84', pointRadius:0, borderWidth:isCall?2.5:1.2, tension:0.15 },
+    { label:'Put', data:putVsTime, borderColor:'#ff5c5c', pointRadius:0, borderWidth:isCall?1.2:2.5, tension:0.15 },
+    { label:`${side} intrinsic`, data:intrinsic, borderColor:'#5c5d54', pointRadius:0, borderWidth:1, borderDash:[4,3] }
+  ], { scales:{ x:{ ticks:{ ...TICK, maxRotation:0, autoSkip:true, maxTicksLimit:8 }, grid:GRID, title:axisTitle('Days left to expiry') },
+                y:{ ticks:{ ...TICK, callback:inrTick }, grid:GRID, title:axisTitle('Option price') } } });
 
-  const dLabels=[], deltaVals=[], gammaVals=[];
-  for(let i=0;i<=50;i++){ const s=S*0.5+(S*1.5-S*0.5)*i/50; const g=bsGreeks(s,K,T,r,sigma,q); dLabels.push(s.toFixed(0)); deltaVals.push(isCall?g.callDelta:g.putDelta); gammaVals.push(g.gamma); }
-  if(charts['chartGreeksSpot']) charts['chartGreeksSpot'].destroy();
-  charts['chartGreeksSpot'] = new Chart(document.getElementById('chartGreeksSpot').getContext('2d'), {
-    type:'line',
-    data:{ labels:dLabels, datasets:[
-      { label:'Delta', data:deltaVals, borderColor:'#ffb020', pointRadius:0, borderWidth:2, tension:0.15, yAxisID:'y' },
-      { label:'Gamma', data:gammaVals, borderColor:'#7fd4ff', pointRadius:0, borderWidth:2, tension:0.15, yAxisID:'y1' }
-    ]},
-    options: baseChartOptions({
-      scales:{
-        x:{ ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} }, grid:{ color:'#1d1e18' } },
-        y:{ position:'left', ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} }, grid:{ color:'#1d1e18' } },
-        y1:{ position:'right', ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} }, grid:{ display:false } }
-      }
-    })
-  });
+  // 5. Delta & gamma across spot prices.
+  const gks = xs.map(s=>bsGreeks(s,K,T,r,sigma,q));
+  const num4 = (v)=> Number(v).toFixed(4), num6 = (v)=> Number(v).toFixed(6);
+  makeLineChart('chartGreeksSpot', undefined, [
+    { label:`${side} delta`, data:gks.map((g,i)=>({x:xs[i], y:isCall?g.callDelta:g.putDelta})), borderColor:'#ffb020', pointRadius:0, borderWidth:2, tension:0.15, yAxisID:'y', fmt:num4 },
+    { label:'Gamma', data:gks.map((g,i)=>({x:xs[i], y:g.gamma})), borderColor:'#7fd4ff', pointRadius:0, borderWidth:2, tension:0.15, yAxisID:'y1', fmt:num6 }
+  ], { scales:{ x:spotAxis(win),
+                y:{ position:'left', ticks:TICK, grid:GRID, title:axisTitle('Delta') },
+                y1:{ position:'right', ticks:{ ...TICK, callback:(v)=> v===0 ? '0' : String(Number(v.toPrecision(2))) }, grid:{ display:false }, title:axisTitle('Gamma') } },
+       plugins:chartPlugins({ title:spotTooltipTitle, markers:[markSpot, markStrike] }) });
 
+  // 6. Where Monte Carlo paths end up at expiry.
   const samples = sampleTerminalPrices(S,T,r,sigma,q,20000);
   const min=Math.min(...samples), max=Math.max(...samples);
   const bins=40; const width=(max-min)/bins;
   const counts=new Array(bins).fill(0);
   samples.forEach(v=>{ let idx=Math.floor((v-min)/width); if(idx>=bins) idx=bins-1; if(idx<0) idx=0; counts[idx]++; });
-  const binLabels = counts.map((_,i)=> (min+i*width).toFixed(0));
-  const strikeBinIdx = Math.min(bins-1, Math.max(0, Math.floor((K-min)/width)));
-  const barColors = counts.map((_,i)=> i===strikeBinIdx ? '#ffb020' : 'rgba(255,176,32,0.35)');
+  const binLabels = counts.map((_,i)=> Math.round(min+(i+0.5)*width).toLocaleString('en-IN'));
+  const binOf = (v)=> Math.min(bins-1, Math.max(0, Math.floor((v-min)/width)));
+  const strikeBinIdx = binOf(K);
+  const barColors = counts.map((_,i)=> {
+    const itm = isCall ? (min+(i+0.5)*width) > K : (min+(i+0.5)*width) < K;
+    return itm ? 'rgba(61,220,132,0.55)' : 'rgba(255,176,32,0.3)';
+  });
+  const pct = (v)=> (v/samples.length*100).toFixed(1)+'% of paths';
   if(charts['chartMC']) charts['chartMC'].destroy();
   charts['chartMC'] = new Chart(document.getElementById('chartMC').getContext('2d'), {
     type:'bar',
-    data:{ labels:binLabels, datasets:[{ label:'Simulated ST', data:counts, backgroundColor:barColors, borderWidth:0 }] },
+    data:{ labels:binLabels, datasets:[{ label:`Paths ending here (green = ${side.toLowerCase()} in the money)`, data:counts, backgroundColor:barColors, borderWidth:0, fmt:pct }] },
     options: baseChartOptions({
-      plugins:{ legend:{ display:false } },
+      plugins:chartPlugins({ legend:{ display:false }, title:(it)=> it.length ? '≈ ₹'+it[0].label : '', label:(ctx)=> pct(ctx.parsed.y),
+                markers:[{ x:binOf(S), label:'Spot', color:'#7fd4ff' }, { x:strikeBinIdx, label:'Strike', color:'#ffb020' }] }),
       scales:{
-        x:{ ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:8.5}, maxTicksLimit:10 }, grid:{ display:false } },
-        y:{ ticks:{ color:'#5c5d54', font:{family:'JetBrains Mono', size:9.5} }, grid:{ color:'#1d1e18' } }
+        x:{ ticks:{ ...TICK, maxRotation:0, autoSkip:true, maxTicksLimit:6 }, grid:{ display:false }, title:axisTitle('Price at expiry') },
+        y:{ ticks:{ ...TICK, callback:(v)=> (v/samples.length*100).toFixed(0)+'%' }, grid:GRID, title:axisTitle('Share of paths') }
       }
     })
   });
@@ -872,6 +975,8 @@ function ivNearest(points, target){
   points.forEach(p=>{ if(!best || Math.abs(p.x-target) < Math.abs(best.x-target)) best = p; });
   return best;
 }
+
+const ivPct = (v)=> Number(v).toFixed(2)+'%';
 
 function renderSmile(expiry){
   const legs = currentChain && currentChain.chain[expiry];
@@ -901,10 +1006,10 @@ function renderSmile(expiry){
   charts['chartSmile'] = new Chart(document.getElementById('chartSmile').getContext('2d'), {
     type:'line',
     data:{ datasets:[
-      { label:'OTM smile', data:otmPts, borderColor:'#ffb020', pointRadius:2, borderWidth:2, tension:0.25 },
-      { label:'Call IV', data:callPts, borderColor:'rgba(61,220,132,0.6)', pointRadius:0, borderWidth:1, borderDash:[4,3], tension:0.25 },
-      { label:'Put IV', data:putPts, borderColor:'rgba(255,92,92,0.6)', pointRadius:0, borderWidth:1, borderDash:[4,3], tension:0.25 },
-      { label:'Spot', data:spotLine, borderColor:'#7fd4ff', pointRadius:0, borderWidth:1, borderDash:[2,2] }
+      { label:'OTM smile', data:otmPts, fmt:ivPct, borderColor:'#ffb020', pointRadius:2, borderWidth:2, tension:0.25 },
+      { label:'Call IV', data:callPts, fmt:ivPct, borderColor:'rgba(61,220,132,0.6)', pointRadius:0, borderWidth:1, borderDash:[4,3], tension:0.25 },
+      { label:'Put IV', data:putPts, fmt:ivPct, borderColor:'rgba(255,92,92,0.6)', pointRadius:0, borderWidth:1, borderDash:[4,3], tension:0.25 },
+      { label:'Spot', data:spotLine, fmt:ivPct, borderColor:'#7fd4ff', pointRadius:0, borderWidth:1, borderDash:[2,2] }
     ]},
     options: baseChartOptions({
       interaction:{ mode:'nearest', intersect:false },
