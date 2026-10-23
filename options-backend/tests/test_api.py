@@ -9,17 +9,8 @@ Run from options-backend/:
 import pytest
 import requests
 
-
-def _offline(*args, **kwargs):
-    raise requests.RequestException("network disabled in tests")
-
-
-# The shared NSEClient warms up a session at import time; keep that offline.
-_real_get = requests.Session.get
-requests.Session.get = _offline
-import nse_client  # noqa: E402
-from app import app  # noqa: E402
-requests.Session.get = _real_get
+import nse_client
+from app import app
 
 EXPIRIES = ["30-Dec-2099", "27-Jan-2100"]
 SPOT = 24500
@@ -136,3 +127,33 @@ def test_nse_failure_returns_502(client, monkeypatch):
     resp = client.get("/api/option-chain/NIFTY")
     assert resp.status_code == 502
     assert "error" in resp.get_json()
+
+
+def test_creating_client_does_not_touch_the_network(monkeypatch):
+    def no_network(*args, **kwargs):
+        raise AssertionError("NSEClient() must not make HTTP requests")
+
+    monkeypatch.setattr(requests.Session, "get", no_network)
+    client = nse_client.NSEClient()
+    assert client._last_refresh == 0.0  # handshake deferred to the first request
+
+
+def test_first_request_performs_the_cookie_handshake(monkeypatch):
+    urls = []
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"expiryDates": ["30-Dec-2099"]}
+
+    def fake_get(self, url, *args, **kwargs):
+        urls.append(url)
+        return FakeResponse()
+
+    monkeypatch.setattr(requests.Session, "get", fake_get)
+    client = nse_client.NSEClient()
+    assert client.get_expiries("NIFTY") == ["30-Dec-2099"]
+    assert urls[:2] == [nse_client.NSE_BASE, f"{nse_client.NSE_BASE}/option-chain"]
+    assert urls[2].endswith("option-chain-contract-info")

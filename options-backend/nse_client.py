@@ -62,7 +62,9 @@ class NSEClient:
         self._cache = {}
         self.cache_ttl = cache_ttl_seconds
         self.session_ttl = session_ttl_seconds
-        self._refresh_session()
+        # No network here: the cookie handshake happens lazily on the first
+        # data request (_last_refresh=0 marks the session as stale), so
+        # importing the app — gunicorn boot, tests — never waits on NSE.
 
     def _refresh_session(self):
         try:
