@@ -99,6 +99,14 @@ select.sel{
 .run-btn:hover{ box-shadow:0 0 22px var(--amber-glow); }
 .run-btn:active{ transform:scale(0.97); }
 .run-btn.secondary{ background:var(--panel2); color:var(--amber); border:1px solid var(--amber-dim); }
+.run-btn:disabled{ cursor:not-allowed; opacity:0.55; box-shadow:none; }
+.run-btn.loading{ pointer-events:none; opacity:0.8; }
+.run-btn.loading::before{ content:''; display:inline-block; width:9px; height:9px; margin-right:7px; vertical-align:-1px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+/* Inputs edited since the last run: nudge the user to press Recalc. */
+.run-btn.attention{ animation:nudge 1.6s ease-in-out infinite; }
+@keyframes nudge{ 0%,100%{ box-shadow:0 0 0 0 var(--amber-glow); } 50%{ box-shadow:0 0 0 5px var(--amber-glow); } }
+button:focus-visible, select:focus-visible, .param input:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
 
 .status-pill{ font-family:var(--mono); font-size:10.5px; color:var(--text-faint); display:flex; align-items:center; gap:6px; }
 .status-dot{ width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
@@ -116,11 +124,36 @@ select.sel{
 .param.market input{ color:var(--text); }
 
 /* ---------- Layout ---------- */
-.layout{ display:grid; grid-template-columns:296px 1fr; gap:14px; padding:14px; align-items:start; }
-@media (max-width:920px){ .layout{ grid-template-columns:1fr; } }
+.layout{ display:grid; grid-template-columns:296px minmax(0,1fr); gap:14px; padding:14px; align-items:start; }
+/* Grid items default to min-width:auto and refuse to shrink below their
+   widest content, which pushed the sidebar off-screen on phones. */
+.layout > *{ min-width:0; }
+@media (max-width:920px){ .layout{ grid-template-columns:minmax(0,1fr); } }
+
+/* Before the first analysis the result cards are all dashes; fade them so
+   the eye goes to the controls instead. */
+body.awaiting .card-grid, body.awaiting .charts-grid, body.awaiting .sidebar .suggestion-card ~ .mini-card{ opacity:0.45; transition:opacity .3s; }
+
+/* ---------- Phones ---------- */
+@media (max-width:720px){
+  header{ position:static; padding:10px 12px; }
+  .header-row{ gap:8px; }
+  .brand{ flex:1 1 100%; }
+  .search-wrap{ flex:1 1 100%; max-width:none; }
+  select.sel{ flex:1 1 40%; max-width:none; }
+  .opt-toggle{ flex:1 1 100%; }
+  .opt-toggle button{ flex:1; }
+  .run-btn{ flex:1 1 40%; }
+  .status-pill{ flex:1 1 100%; }
+  .param{ min-width:33%; padding:8px 10px; }
+  .param input{ font-size:14px; }
+  .layout{ padding:10px; gap:10px; }
+  .charts-grid{ grid-template-columns:minmax(0,1fr); }
+  .card-grid{ grid-template-columns:minmax(0,1fr); }
+}
 
 /* ---------- Suggestion panel ---------- */
-.sidebar{ position:sticky; top:170px; display:flex; flex-direction:column; gap:12px; }
+.sidebar{ display:flex; flex-direction:column; gap:12px; }
 .suggestion-card{ border:1px solid var(--border); border-radius:10px; background:linear-gradient(165deg, var(--panel) 0%, #0d0e0a 100%); overflow:hidden; }
 .sug-head{ padding:12px 14px 10px; border-bottom:1px solid var(--border-soft); }
 .sug-eyebrow{ font-family:var(--mono); font-size:9.5px; letter-spacing:0.14em; color:var(--text-faint); text-transform:uppercase; }
